@@ -110,6 +110,18 @@ else
   fix "$APP missing or built for another folder" .venv/bin/python setup.py py2app -A
 fi
 
+echo "== launcher link (so Raycast / Launchpad can find the app)"
+LINK="$HOME/Applications/Voice Prompt.app"
+if [ -e "$LINK" ] && [ ! -L "$LINK" ]; then
+  echo "  warning: $LINK exists and is not a link; leaving it alone"
+elif [ -L "$LINK" ] && [ "$(readlink "$LINK")" = "$ROOT/$APP" ]; then
+  ok "$LINK"
+else
+  # single quotes on purpose: $1 and $2 are expanded by the inner bash, not here
+  # shellcheck disable=SC2016
+  fix "$LINK" bash -c 'mkdir -p "$(dirname "$2")" && ln -sfn "$1" "$2"' _ "$ROOT/$APP" "$LINK"
+fi
+
 echo
 if [ "$MISSING" -gt 0 ] && [ "$CHECK" -eq 1 ]; then
   echo "$MISSING item(s) missing. Run scripts/install.sh to fix them."
