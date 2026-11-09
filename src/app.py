@@ -47,7 +47,8 @@ def main():
               "  System Settings > Privacy & Security > Accessibility: remove and re-add your terminal app,\n"
               "  then quit it completely (Cmd+Q) and reopen. Results will still be copied to the clipboard.",
               file=sys.stderr)
-    d = Dictation(stt_cfg, llm_cfg, system, getattr(keyboard.Key, args.hotkey))
+    d = Dictation(stt_cfg, llm_cfg, system, getattr(keyboard.Key, args.hotkey),
+                  debug=print, mode=args.mode)
     print("Ready. Hold %s to talk (Esc = discard, double-tap = cancel). Ctrl+C to quit." % args.hotkey)
     with keyboard.Listener(on_press=d.on_press, on_release=d.on_release) as listener:
         listener.join()

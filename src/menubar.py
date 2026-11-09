@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 import rumps  # noqa: E402
 from pynput import keyboard  # noqa: E402
 
-from src import login  # noqa: E402
+from src import login, metrics  # noqa: E402
 from src.core import IDLE, RECORDING, WORKING, Dictation, check_accessibility  # noqa: E402
 
 CONFIG = Path.home() / "Library" / "Application Support" / "VoicePrompt" / "config.json"
@@ -49,7 +49,8 @@ class VoicePrompt(rumps.App):
             self.cfg["mode"] = DEFAULTS["mode"]
         stt_cfg, llm_cfg, system = self._mode_parts(self.cfg["mode"])
         self.dictation = Dictation(stt_cfg, llm_cfg, system, getattr(keyboard.Key, self.cfg["hotkey"]),
-                                   log=lambda m: print(m, flush=True))
+                                   log=lambda m: (print(m, flush=True), metrics.log_line(m)),
+                                   debug=lambda m: print(m, flush=True), mode=self.cfg["mode"])
         self.listener = keyboard.Listener(on_press=self.dictation.on_press,
                                           on_release=self.dictation.on_release)
         self.listener.start()
@@ -58,11 +59,12 @@ class VoicePrompt(rumps.App):
         self.last = rumps.MenuItem("Last result: (none yet)", callback=self.copy_last)
         self.cancel_item = rumps.MenuItem("Cancel (or Esc / double-tap)")
         self.mode_menu = self._mode_menu()
+        self.logs_item = rumps.MenuItem("Open logs folder", callback=lambda _: subprocess.run(["open", str(metrics.log_dir())]))
         self.login_item = rumps.MenuItem("Start at login", callback=self.toggle_login)
         self.login_item.state = 1 if login.is_enabled() else 0
         self.access_item = rumps.MenuItem("⚠ Allow Accessibility (needed to paste)", callback=self.open_access)
         self.menu = [self.status, self.last, self.cancel_item, None, self.mode_menu,
-                     self.login_item, self.access_item, None, rumps.MenuItem("Quit", callback=self.quit)]
+                     self.logs_item, self.login_item, self.access_item, None, rumps.MenuItem("Quit", callback=self.quit)]
         self.access_item.hidden = check_accessibility()
         self.timer = rumps.Timer(self.refresh, 0.3)  # UI updates on the main thread, not from workers
         self.timer.start()
@@ -118,7 +120,7 @@ class VoicePrompt(rumps.App):
     def choose_mode(self, key):
         self.cfg["mode"] = key
         save_config(self.cfg)
-        self.dictation.set_mode(*self._mode_parts(key))
+        self.dictation.set_mode(*self._mode_parts(key), mode=key)
         for k, it in zip(self.setups["modes"], self.mode_menu.values()):
             it.state = 1 if k == key else 0
 
