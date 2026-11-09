@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from src.backends import run_stt, run_llm  # noqa: E402  (shared with the live app)
+from src.backends import run_stt, run_llm, unload_ollama  # noqa: E402  (shared with the live app)
 EVAL = ROOT / "eval"
 CACHE = EVAL / ".cache"
 RESULTS = EVAL / "results"
@@ -213,6 +213,7 @@ def cmd_prompts(args):
                 rows.append({"id": c["id"], "output": out, "fail": why, "seconds": round(dt, 2)})
             (out_root / (label + ".json")).write_text(json.dumps(rows, indent=1, ensure_ascii=False), encoding="utf-8")
             passed = sum(v[0] for v in by_cat.values())
+            unload_ollama(llms[name])  # leave no multi-GB model loaded behind us
             table.append((label, passed, len(cases), secs / max(1, len(cases)), by_cat))
             print("%-22s %2d/%d pass   avg %.1fs" % (label, passed, len(cases), secs / max(1, len(cases))))
             if args.verbose:

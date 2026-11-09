@@ -90,8 +90,61 @@ def apply_glossary(rules_file, text):
         rules = json.load(f)
     for r in rules:
         text = re.sub(r["match"], r["to"], text, flags=re.I)
-    text = re.sub(r"\s{2,}", " ", text).strip()
-    return text[:1].upper() + text[1:] if text and text[0].islower() else text
+    return re.sub(r"\s{2,}", " ", text).strip()
+
+
+def unload_ollama(cfg):
+    """Free an Ollama model's memory right away (keep_alive 0). No-op for other backends; never raises."""
+    if cfg.get("kind") != "ollama":
+        return
+    try:
+        post_json(cfg.get("host", "http://localhost:11434") + "/api/generate",
+                  {"model": cfg["model"], "keep_alive": 0}, {}, timeout=10)
+    except Exception:
+        pass  # Ollama not running = nothing loaded
+
+
+# Spoken editing commands for the no-LLM mode. A command must be a clause of its own
+# (start of text or right after . ! ? , ; :) and be followed by punctuation or the end, so
+# "I think we should delete that file." and "delete everything in the namespace" are left alone.
+_BOUNDARY = r"(?:^|(?<=[.!?,;:]\s))"
+_CMD_ALL = (r"(?:(?:scratch|delete|erase|forget|clear|remove)\s+(?:all\s+of\s+)?(?:everything|all\s+that|it\s+all)"
+            r"(?:\s+(?:i|we)\s+(?:said|wrote|have))?(?:\s+so\s+far)?"
+            r"|start\s+(?:over|again|from\s+scratch|from\s+the\s+beginning))")
+_CMD_LAST = r"(?:scratch|strike|delete|erase|forget|cancel)\s+that"
+_LEAD = r"(?:(?:no|nope|wait|sorry|oh|okay|ok|actually|never\s+mind)[,.!]?\s+)*"  # "No, never mind. Scratch that."
+_TAIL = r"(?:[,.]?\s*(?:and\s+)?start\s+(?:from\s+here|over|again))?"
+_AFTER = r"(?=[.!?,;:]|\s*$)"
+_VOICE_CMD = re.compile(_BOUNDARY + _LEAD + r"(?:(?P<all>" + _CMD_ALL + r")|(?P<last>" + _CMD_LAST + r"))" + _TAIL + _AFTER, re.I)
+
+
+_LOWERCASE_TOOLS = {"kubectl", "oc", "git", "docker", "helm", "terraform", "npm", "pip", "aws", "curl"}
+
+
+def _capitalise(text):
+    """A cut can leave a fragment like 'in eu-west-1.'; start it with a capital, but leave tool names alone."""
+    first = text.split(" ", 1)[0] if text else ""
+    return text if first in _LOWERCASE_TOOLS or not first[:1].islower() else text[:1].upper() + text[1:]
+
+
+def apply_voice_commands(text):
+    """'scratch that' removes the previous sentence; 'start over' / 'delete everything' removes
+    everything before it. An optional trailing 'and start from here' is swallowed too."""
+    cut = False
+    for _ in range(20):  # a dictation with 20 commands is a different problem
+        m = _VOICE_CMD.search(text)
+        if not m:
+            break
+        cut = True
+        after = text[m.end():].lstrip(" ,;:.!?")
+        if m.group("all"):
+            text = after
+        else:
+            before = text[:m.start()].rstrip(" ,;:")
+            end = len(before) - 1 if before[-1:] in ".!?" else len(before)  # skip the sentence's own final mark
+            at = max(before.rfind(c, 0, end) for c in ".!?")
+            text = (before[:at + 1] + " " + after).strip() if at >= 0 else after
+    return _capitalise(text) if cut else text
 
 
 def run_llm(cfg, system, transcript):
@@ -101,12 +154,13 @@ def run_llm(cfg, system, transcript):
     if kind == "fake":
         return "FAKE OUTPUT: " + transcript
     if kind == "glossary":
-        return apply_glossary(cfg["rules"], transcript)
+        text = apply_glossary(cfg["rules"], transcript)
+        return apply_voice_commands(text) if cfg.get("voice_commands", True) else text
     if kind == "ollama":
         host = cfg.get("host", "http://localhost:11434")
         r = post_json(host + "/api/chat", {
             "model": cfg["model"], "stream": False,
-            "keep_alive": cfg.get("keep_alive", "30m"),  # keep the model in RAM between dictations
+            "keep_alive": cfg.get("keep_alive", "10m"),  # stay loaded between dictations, then free the RAM
             "options": {"temperature": 0},
             "messages": [{"role": "system", "content": system},
                          {"role": "user", "content": user}],

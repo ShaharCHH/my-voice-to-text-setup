@@ -31,6 +31,17 @@ Why English has no LLM by default: Whisper already adds punctuation and drops mo
 
 \*Measured on an M1 MacBook Pro with a handful of short clips, not a benchmark. Run `src/stats.py` for your own numbers.
 
+### Spoken editing in English-only mode
+With no LLM there is no judgement, so a few fixed phrases edit your dictation. Say them as their own sentence (Whisper's punctuation marks the edges):
+
+| Say | Effect |
+|---|---|
+| "Scratch that." (also strike / delete / erase / forget / cancel that) | removes the previous sentence |
+| "Start over." / "Delete everything and start from here." | removes everything before it |
+| "No, never mind. Scratch that." | same; the "no / never mind / wait / sorry" lead-in is part of the command |
+
+Phrases used as ordinary words ("we should delete that file", "delete everything in the namespace") are left alone, because a command must be a sentence of its own. If Whisper doesn't punctuate around it, nothing happens (it fails safe). Turn off with `"voice_commands": false` on the `glossary` entry in `eval/setups.json`. Tests: `python3 -m unittest discover -s tests`.
+
 ## Controls
 
 | Action | Result |
@@ -92,6 +103,15 @@ Two files in `~/Library/Logs/VoicePrompt/` (outside the repo, never committed):
 
 Don't want your words stored? Set `"log_text": false` in `~/Library/Application Support/VoicePrompt/config.json`.
 
+## Resource use
+
+```bash
+scripts/resources.sh            # one snapshot: CPU and memory of the app, Whisper and Ollama
+scripts/resources.sh --watch    # live; start it, then dictate to see Whisper appear for ~2 s
+```
+
+On an M1 with 32 GB, measured: the menubar app idles at ~120 MB and ~2 % CPU; Whisper peaks at ~1.9 GB for ~2 s per dictation; the LLM is the big one (Gemma ~8 GB, Qwen ~5.7 GB of GPU-shared memory) and only exists in the LLM modes. The app unloads an LLM when you switch away from it or quit, and Ollama frees idle models after 10 minutes. Activity Monitor works too: search "Voice Prompt", "ollama" and "whisper"; Window → GPU History (Cmd+4) shows the GPU.
+
 ## Evaluation
 
 `eval/run_eval.py` runs each Whisper setup (turbo, large-v3, ivrit-ai Hebrew fine-tune; forced `he` vs auto) over recorded clips and scores whether English terms survive. The recordings stay private, so results cannot be reproduced from this repo, but the harness and the prompts are here (`prompts/`, versioned; v4-en is used by the experimental AI-rewrite mode, v5-en is a restructured variant that scored worse).
@@ -111,6 +131,7 @@ src/core.py       hotkey state machine: record, transcribe, rewrite, paste, canc
 src/backends.py   whisper.cpp / Ollama / Anthropic calls (shared with the eval)
 scripts/install.sh  one-command setup and check
 src/menubar.py    the menubar app        src/app.py   terminal version
+scripts/resources.sh  CPU / memory snapshot
 src/metrics.py    logs        src/stats.py   timings        src/transcripts.py   heard vs output
 prompts/          system prompts, versioned      eval/   harness and setups
 ```

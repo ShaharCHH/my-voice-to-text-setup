@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 # The .app sets VOICEPROMPT_ROOT (see setup.py); from source fall back to this file's location.
@@ -18,6 +19,7 @@ import rumps  # noqa: E402
 from pynput import keyboard  # noqa: E402
 
 from src import login, metrics  # noqa: E402
+from src.backends import unload_ollama  # noqa: E402
 from src.core import IDLE, RECORDING, WORKING, Dictation, check_accessibility  # noqa: E402
 
 CONFIG = Path.home() / "Library" / "Application Support" / "VoicePrompt" / "config.json"
@@ -121,12 +123,16 @@ class VoicePrompt(rumps.App):
     def choose_mode(self, key):
         self.cfg["mode"] = key
         save_config(self.cfg)
+        old_llm = self.dictation.llm_cfg
         self.dictation.set_mode(*self._mode_parts(key), mode=key)
+        if old_llm != self.dictation.llm_cfg:  # free the previous model's memory (several GB)
+            threading.Thread(target=unload_ollama, args=(old_llm,), daemon=True).start()
         for k, it in zip(self.setups["modes"], self.mode_menu.values()):
             it.state = 1 if k == key else 0
 
     def quit(self, _):
         self.listener.stop()
+        unload_ollama(self.dictation.llm_cfg)
         rumps.quit_application()
 
 
