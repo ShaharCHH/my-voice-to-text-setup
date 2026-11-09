@@ -1,17 +1,84 @@
 {
   "stt": {
-    "fake": {"kind": "fake"},
-    "turbo-he": {"kind": "whisper-cpp", "model": "~/models/whisper/ggml-large-v3-turbo.bin", "language": "he", "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"},
-    "turbo-auto": {"kind": "whisper-cpp", "model": "~/models/whisper/ggml-large-v3-turbo.bin", "language": "auto", "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"},
-    "large-he": {"kind": "whisper-cpp", "model": "~/models/whisper/ggml-large-v3.bin", "language": "he", "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"},
-    "large-auto": {"kind": "whisper-cpp", "model": "~/models/whisper/ggml-large-v3.bin", "language": "auto", "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"},
-    "ivrit-he": {"kind": "whisper-cpp", "model": "~/models/whisper/ivrit-ai-ggml-large-v3-turbo.bin", "language": "he", "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"},
-    "ivrit-auto": {"kind": "whisper-cpp", "model": "~/models/whisper/ivrit-ai-ggml-large-v3-turbo.bin", "language": "auto", "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"}
+    "fake": {
+      "kind": "fake"
+    },
+    "turbo-he": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ggml-large-v3-turbo.bin",
+      "language": "he",
+      "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"
+    },
+    "turbo-auto": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ggml-large-v3-turbo.bin",
+      "language": "auto",
+      "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"
+    },
+    "large-he": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ggml-large-v3.bin",
+      "language": "he",
+      "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"
+    },
+    "large-auto": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ggml-large-v3.bin",
+      "language": "auto",
+      "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"
+    },
+    "ivrit-he": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ivrit-ai-ggml-large-v3-turbo.bin",
+      "language": "he",
+      "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"
+    },
+    "ivrit-auto": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ivrit-ai-ggml-large-v3-turbo.bin",
+      "language": "auto",
+      "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"
+    },
+    "turbo-en": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ggml-large-v3-turbo.bin",
+      "language": "en",
+      "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"
+    }
   },
   "llm": {
-    "fake": {"kind": "fake"},
-    "haiku": {"kind": "anthropic", "model": "claude-haiku-5-5"},
-    "gemma": {"kind": "ollama", "model": "gemma3:12b"},
-    "qwen": {"kind": "ollama", "model": "qwen2.5:7b"}
+    "fake": {
+      "kind": "fake"
+    },
+    "haiku": {
+      "kind": "anthropic",
+      "model": "claude-haiku-5-5"
+    },
+    "gemma": {
+      "kind": "ollama",
+      "model": "gemma3:12b"
+    },
+    "qwen": {
+      "kind": "ollama",
+      "model": "qwen2.5:7b"
+    },
+    "llama3": {
+      "kind": "ollama",
+      "model": "llama3:latest"
+    }
+  },
+  "modes": {
+    "hebrew": {
+      "label": "Hebrew + English (slower)",
+      "stt": "turbo-he",
+      "llm": "gemma",
+      "prompt": "prompts/v3.md"
+    },
+    "english": {
+      "label": "English only (faster)",
+      "stt": "turbo-en",
+      "llm": "llama3",
+      "prompt": "prompts/v4-en.md"
+    }
   }
 }

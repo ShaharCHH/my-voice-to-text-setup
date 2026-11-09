@@ -21,7 +21,7 @@ from src import login  # noqa: E402
 from src.core import IDLE, RECORDING, WORKING, Dictation, check_accessibility  # noqa: E402
 
 CONFIG = Path.home() / "Library" / "Application Support" / "VoicePrompt" / "config.json"
-DEFAULTS = {"stt": "turbo-he", "llm": "gemma", "prompt": "prompts/v3.md", "hotkey": "alt_r"}
+DEFAULTS = {"mode": "hebrew", "hotkey": "alt_r"}
 ICONS = {IDLE: "🎙", RECORDING: "🔴", WORKING: "⏳"}
 ACCESSIBILITY_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
 
@@ -45,10 +45,11 @@ class VoicePrompt(rumps.App):
         super().__init__("Voice Prompt", title=ICONS[IDLE], quit_button=None)
         self.cfg = load_config()
         self.setups = json.loads((ROOT / "eval" / "setups.json").read_text(encoding="utf-8"))
-        system = (ROOT / self.cfg["prompt"]).read_text(encoding="utf-8")
-        self.dictation = Dictation(
-            self.setups["stt"][self.cfg["stt"]], self.setups["llm"][self.cfg["llm"]], system,
-            getattr(keyboard.Key, self.cfg["hotkey"]), log=lambda m: print(m, flush=True))
+        if self.cfg["mode"] not in self.setups["modes"]:
+            self.cfg["mode"] = DEFAULTS["mode"]
+        stt_cfg, llm_cfg, system = self._mode_parts(self.cfg["mode"])
+        self.dictation = Dictation(stt_cfg, llm_cfg, system, getattr(keyboard.Key, self.cfg["hotkey"]),
+                                   log=lambda m: print(m, flush=True))
         self.listener = keyboard.Listener(on_press=self.dictation.on_press,
                                           on_release=self.dictation.on_release)
         self.listener.start()
@@ -56,12 +57,11 @@ class VoicePrompt(rumps.App):
         self.status = rumps.MenuItem("Ready")
         self.last = rumps.MenuItem("Last result: (none yet)", callback=self.copy_last)
         self.cancel_item = rumps.MenuItem("Cancel (or Esc / double-tap)")
-        self.stt_menu = self._choice_menu("Speech model (STT)", "stt")
-        self.llm_menu = self._choice_menu("Translation model (LLM)", "llm")
+        self.mode_menu = self._mode_menu()
         self.login_item = rumps.MenuItem("Start at login", callback=self.toggle_login)
         self.login_item.state = 1 if login.is_enabled() else 0
         self.access_item = rumps.MenuItem("⚠ Allow Accessibility (needed to paste)", callback=self.open_access)
-        self.menu = [self.status, self.last, self.cancel_item, None, self.stt_menu, self.llm_menu,
+        self.menu = [self.status, self.last, self.cancel_item, None, self.mode_menu,
                      self.login_item, self.access_item, None, rumps.MenuItem("Quit", callback=self.quit)]
         self.access_item.hidden = check_accessibility()
         self.timer = rumps.Timer(self.refresh, 0.3)  # UI updates on the main thread, not from workers
@@ -102,22 +102,25 @@ class VoicePrompt(rumps.App):
             login.enable(path)
             item.state = 1
 
-    def _choice_menu(self, title, key):
-        menu = rumps.MenuItem(title)
-        for name in self.setups[key]:
-            if name == "fake":
-                continue
-            item = rumps.MenuItem(name, callback=lambda it, k=key: self.choose(k, it))
-            item.state = 1 if name == self.cfg[key] else 0
+    def _mode_parts(self, mode):
+        m = self.setups["modes"][mode]
+        return (self.setups["stt"][m["stt"]], self.setups["llm"][m["llm"]],
+                (ROOT / m["prompt"]).read_text(encoding="utf-8"))
+
+    def _mode_menu(self):
+        menu = rumps.MenuItem("Mode")
+        for key, m in self.setups["modes"].items():
+            item = rumps.MenuItem(m["label"], callback=lambda it, k=key: self.choose_mode(k))
+            item.state = 1 if key == self.cfg["mode"] else 0
             menu.add(item)
         return menu
 
-    def choose(self, key, item):
-        self.cfg[key] = item.title
+    def choose_mode(self, key):
+        self.cfg["mode"] = key
         save_config(self.cfg)
-        setattr(self.dictation, key + "_cfg", self.setups[key][item.title])
-        for it in (self.stt_menu if key == "stt" else self.llm_menu).values():
-            it.state = 1 if it.title == item.title else 0
+        self.dictation.set_mode(*self._mode_parts(key))
+        for k, it in zip(self.setups["modes"], self.mode_menu.values()):
+            it.state = 1 if k == key else 0
 
     def quit(self, _):
         self.listener.stop()

@@ -6,6 +6,7 @@ Double-tap the hotkey while it is working = cancel. The menubar app (menubar.py)
 thing with a UI. Needs Microphone, Accessibility and Input Monitoring for the host app.
 
   .venv/bin/python src/app.py                       # live
+  .venv/bin/python src/app.py --mode english        # faster, English only
   .venv/bin/python src/app.py --wav some.wav        # dry run: no mic, no paste
   .venv/bin/python src/app.py --stt fake --llm fake --wav some.wav   # wiring test only
 """
@@ -21,16 +22,19 @@ from src.core import Dictation, check_accessibility, process_wav  # noqa: E402
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--stt", default="turbo-he", help="name in eval/setups.json")
-    ap.add_argument("--llm", default="gemma", help="name in eval/setups.json")
-    ap.add_argument("--prompt", default="prompts/v3.md")
+    ap.add_argument("--mode", default="hebrew", help="hebrew or english (see modes in eval/setups.json)")
+    ap.add_argument("--stt", help="override the mode's STT setup (name in eval/setups.json)")
+    ap.add_argument("--llm", help="override the mode's LLM setup")
+    ap.add_argument("--prompt", help="override the mode's prompt file")
     ap.add_argument("--hotkey", default="alt_r", help="pynput Key name: alt_r, alt_l, cmd_r, ctrl_r, f13...")
     ap.add_argument("--wav", help="dry run on this 16 kHz wav: print the result, no mic, no paste")
     args = ap.parse_args()
 
     setups = json.loads((ROOT / "eval" / "setups.json").read_text(encoding="utf-8"))
-    stt_cfg, llm_cfg = setups["stt"][args.stt], setups["llm"][args.llm]
-    system = (ROOT / args.prompt).read_text(encoding="utf-8")
+    mode = setups["modes"][args.mode]
+    stt_cfg = setups["stt"][args.stt or mode["stt"]]
+    llm_cfg = setups["llm"][args.llm or mode["llm"]]
+    system = (ROOT / (args.prompt or mode["prompt"])).read_text(encoding="utf-8")
 
     if args.wav:
         heard, out, ts, tl = process_wav(args.wav, stt_cfg, llm_cfg, system)

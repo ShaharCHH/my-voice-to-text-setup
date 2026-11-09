@@ -95,6 +95,10 @@ class Dictation:
         self._last_tap = 0.0
         self._lock = threading.Lock()
 
+    def set_mode(self, stt_cfg, llm_cfg, system):
+        """Switch models/prompt. A job already running keeps what it started with."""
+        self.stt_cfg, self.llm_cfg, self.system = stt_cfg, llm_cfg, system
+
     # ---- helpers ----
     def _set(self, state, message=""):
         self.state, self.message = state, message
@@ -184,8 +188,8 @@ class Dictation:
             with tempfile.TemporaryDirectory() as d:
                 wav = Path(d) / "clip.wav"
                 recorder.save_wav(audio, wav)
-                heard, out, ts, tl = process_wav(wav, self.stt_cfg, self.llm_cfg, self.system,
-                                                 cancel, self.log)
+                stt_cfg, llm_cfg, system = self.stt_cfg, self.llm_cfg, self.system  # snapshot
+                heard, out, ts, tl = process_wav(wav, stt_cfg, llm_cfg, system, cancel, self.log)
         except Cancelled:
             return  # state was already reset by whoever cancelled
         except Exception as e:
