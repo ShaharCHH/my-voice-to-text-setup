@@ -42,18 +42,29 @@ def check_accessibility():
         return True  # cannot check; do not block
 
 
+V_KEYCODE = 9  # the physical "V" key; Cmd+V is matched by key position, so no layout lookup is needed
+
+
+def press_cmd_v():
+    """Post Cmd+V through Quartz. pynput's Controller() looks up the keyboard layout via a macOS
+    call (TSMGetInputSourceProperty) that must run on the main thread; from our worker thread it
+    killed the whole app (SIGTRAP, see HANDOFF). A raw key code avoids that call entirely."""
+    from Quartz import (CGEventCreateKeyboardEvent, CGEventPost, CGEventSetFlags,
+                        kCGEventFlagMaskCommand, kCGHIDEventTap)
+    for key_down in (True, False):
+        event = CGEventCreateKeyboardEvent(None, V_KEYCODE, key_down)
+        CGEventSetFlags(event, kCGEventFlagMaskCommand)
+        CGEventPost(kCGHIDEventTap, event)
+
+
 def paste(text):
-    """Copy text and press Cmd+V in the frontmost app via pynput. On success restore the old
-    clipboard (text only); on failure leave the result on the clipboard to paste by hand."""
-    from pynput import keyboard
+    """Copy text and press Cmd+V in the frontmost app. On success restore the old clipboard
+    (text only); on failure leave the result on the clipboard to paste by hand."""
     env = {"LC_CTYPE": "UTF-8"}  # so pbcopy/pbpaste handle non-ASCII correctly
     old = subprocess.run(["pbpaste"], capture_output=True, env=env).stdout
     subprocess.run(["pbcopy"], input=text.encode("utf-8"), env=env, check=True)
     try:
-        kb = keyboard.Controller()
-        with kb.pressed(keyboard.Key.cmd):
-            kb.press("v")
-            kb.release("v")
+        press_cmd_v()
     except Exception as e:
         print("paste failed (%s); result is on your clipboard, press Cmd+V yourself" % e, file=sys.stderr)
         return False
