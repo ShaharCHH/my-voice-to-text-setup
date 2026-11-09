@@ -148,7 +148,8 @@
   ],
   "must_not_contain": [
    "us-east-1"
-  ]
+  ],
+  "min_ratio": 0.3
  },
  {
   "id": "cor2",
@@ -335,7 +336,7 @@
    "logical replication",
    "cutover",
    "DMS|Database Migration Service",
-   "2 TB|2TB|2 terabyte|2-terabyte|two terabyte|two-terabyte"
+   "2 TB|2TB|2 terabytes?|2-terabyte|two terabytes?|two-terabyte"
   ],
   "must_not_contain": []
  },

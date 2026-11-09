@@ -46,7 +46,19 @@ Words kept from Whisper's text after the rewrite step (100% = nothing lost):
 
 Gemma, perfect on the synthetic set, drops the most on real speech. Decision: English mode uses the glossary only; the LLM stays for Hebrew (translation) and as an opt-in experimental mode. Glossary weaknesses (synthetic set): spoken commands 0/3, self-corrections 0/3, long 1/4.
 
+## Qwen 2.5 7B (added later the same day)
+
+| prompt v4-en, 33 cases | pass | avg sec |
+|---|---|---|
+| qwen2.5:7b | 31/33 | 1.0 |
+| llama3 8B | 27/33 | 1.1 |
+| gemma3:12b | 32/33 | 5.1 |
+
+(Judge fixed after the first run: a correct self-correction was flagged "too short", and plural "terabytes" was not accepted. Applied to all models.) On real English dictations Qwen kept 81-87% of the words, never turned "cube deck" into `kubectl`, and kept every meaning; it still drops a clause now and then (the "which I cannot see in the Kube Deck" reason in #2). Injection cases 3/3, spoken commands 3/3.
+
+Hebrew (4 clips, v3 prompt, LLM seconds after warm-up): qwen 2.8 / 5.1 / 2.9 vs gemma 10.1 / 14.1 / 8.2. Quality about equal: qwen got the c02 self-correction right, gemma was cleaner on c04, qwen missed `QCTL` -> `kubectl`. Added as the mode "Hebrew + English (faster, Qwen)" to compare in real use; the default stays Gemma until there is more data.
+
 ## Next
-- Qwen2.5 7B on the prompt test set and the real dictations (download pending).
+- Use "Hebrew + English (faster, Qwen)" for a few days; compare with Gemma via src/transcripts.py before changing the default.
 - Idea: LLM with a safety net, falling back to the glossary text when the rewrite keeps under ~85% of the words.
 - Record pure-English, alternating and silent clips to separate `he` from `auto`.

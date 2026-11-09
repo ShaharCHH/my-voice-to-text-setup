@@ -22,9 +22,10 @@ Pick one from the menubar icon (🎙 → Mode). The choice is remembered.
 
 | Mode | Speech to text | Text cleanup | Typical wait\* |
 |---|---|---|---|
-| **Hebrew + English** | Whisper large-v3-turbo, forced to Hebrew | Gemma 3 12B translates and tidies | ~6 to 15 s |
+| **Hebrew + English** | Whisper large-v3-turbo, forced to Hebrew | Gemma 3 12B translates and tidies | ~8 to 15 s |
+| **Hebrew + English (faster)** | same | Qwen 2.5 7B: about 3x faster, similar quality on 4 clips | ~3 to 6 s |
 | **English only** (default for English) | same model, forced to English | none: a glossary of find-and-replace rules (`prompts/glossary-en.json`) | ~2 s |
-| **English + AI rewrite** (experimental) | same | Llama 3 8B rewrites | ~3 s |
+| **English + AI rewrite** (experimental) | same | Qwen 2.5 7B rewrites | ~3 s |
 
 Why English has no LLM by default: Whisper already adds punctuation and drops most "um"s, and on real dictations the rewrite step lost content (once 27 words became 4). A glossary can fix tool names (`cube control` becomes `kubectl`) but cannot delete a sentence. Hebrew needs the LLM, because it has to translate.
 
@@ -54,7 +55,7 @@ It needs [Homebrew](https://brew.sh). Below is what it does, if you prefer to do
 
 ```bash
 brew install whisper.cpp portaudio ollama
-ollama pull gemma3:12b && ollama pull llama3
+ollama pull gemma3:12b && ollama pull qwen2.5:7b
 
 # Whisper model (ggml format) into ~/models/whisper/
 mkdir -p ~/models/whisper && curl -L -o ~/models/whisper/ggml-large-v3-turbo.bin \

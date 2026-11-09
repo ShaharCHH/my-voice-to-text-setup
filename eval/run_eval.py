@@ -171,7 +171,7 @@ def judge(case, out):
         fails.append("filler left in")
     if n_out > 1.4 * n_in + 3:
         fails.append("too long (%d words from %d): answered or added?" % (n_out, n_in))
-    if n_out < 0.45 * n_in:
+    if n_out < case.get("min_ratio", 0.45) * n_in:  # a self-correction legitimately shrinks a sentence
         fails.append("too short (%d words from %d): details dropped?" % (n_out, n_in))
     if out.startswith("`") and out.endswith("`") and out.count("`") == 2 and n_out > 6:
         fails.append("whole output in backticks")

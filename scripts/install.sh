@@ -14,15 +14,15 @@ PIP_PINS=("pyobjc-core<12" "pyobjc-framework-Cocoa<12" "pyobjc-framework-Quartz<
 PIP_PKGS=(sounddevice pynput numpy rumps py2app)
 
 CHECK=0
-WITH_QWEN=0
+WITH_LLAMA3=0
 MISSING=0
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/install.sh [--check] [--with-qwen]
+Usage: scripts/install.sh [--check] [--with-llama3]
 
   --check       only report what is missing; change nothing (exit 1 if anything is)
-  --with-qwen   also pull qwen2.5:7b (for the model comparison in eval/)
+  --with-llama3 also pull llama3 (only needed to re-run the model comparison in eval/)
   -h, --help    show this help
 USAGE
 }
@@ -30,7 +30,7 @@ USAGE
 for arg in "$@"; do
   case "$arg" in
     --check) CHECK=1 ;;
-    --with-qwen) WITH_QWEN=1 ;;
+    --with-llama3) WITH_LLAMA3=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $arg" >&2; usage >&2; exit 2 ;;
   esac
@@ -67,8 +67,8 @@ else
   fix "ollama is not running" brew services start ollama
   [ "$CHECK" -eq 1 ] || sleep 3
 fi
-models=(gemma3:12b llama3:latest)
-[ "$WITH_QWEN" -eq 1 ] && models+=(qwen2.5:7b)
+models=(gemma3:12b qwen2.5:7b)
+[ "$WITH_LLAMA3" -eq 1 ] && models+=(llama3:latest)
 for m in "${models[@]}"; do
   # awk reads all input, so no SIGPIPE under pipefail (grep -q would exit early)
   if ollama list 2>/dev/null | awk -v m="$m" 'NR > 1 && $1 == m { f = 1 } END { exit !f }'; then

@@ -78,6 +78,12 @@
       "llm": "gemma",
       "prompt": "prompts/v3.md"
     },
+    "hebrew-fast": {
+      "label": "Hebrew + English (faster, Qwen)",
+      "stt": "turbo-he",
+      "llm": "qwen",
+      "prompt": "prompts/v3.md"
+    },
     "english": {
       "label": "English only (fastest, no rewrite)",
       "stt": "turbo-en",
@@ -85,9 +91,9 @@
       "prompt": null
     },
     "english-llm": {
-      "label": "English + AI rewrite (experimental)",
+      "label": "English + AI rewrite (experimental, Qwen)",
       "stt": "turbo-en",
-      "llm": "llama3",
+      "llm": "qwen",
       "prompt": "prompts/v4-en.md"
     }
   }
