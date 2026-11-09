@@ -1,0 +1,12 @@
+eval/audio/
+HANDOFF.md
+.DS_Store
+recordings/
+eval/.cache/
+eval/results/
+__pycache__/
+.venv/
+dist/
+build/
+*.egg-info/
+eval/reference/
