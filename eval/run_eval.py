@@ -8,6 +8,8 @@ so you can tell whether a term was lost by Whisper or by the LLM:
   stt   --setup NAME           audio -> Hebrew/English transcript   (results/stt-NAME/)
   llm   --stt NAME --llm NAME  saved transcript -> English prompt  (results/NAME__LLM/)
   score RUN                    score a results dir (term check, latency, review sheet)
+  prompts --prompt P [P..] --llm L [L..]
+                               text-only test of prompt x LLM combos on eval/prompt_cases.json
 
 Setups live in eval/setups.json, cases in eval/cases.json.
 """
@@ -143,6 +145,87 @@ def term_found(term, text):
     return re.search(r"(?<![\w])" + re.escape(term) + r"(?![\w])", text, re.I) is not None
 
 
+# ---------- prompt test set (text in, text out; no audio needed) ----------
+
+FILLER = re.compile(r"(?<![\w])(um|uh|er)(?![\w])", re.I)
+
+
+def has(spec, text):
+    """spec 'a|b' = either alternative. Boundary check only where the term edge is a word char."""
+    for alt in spec.split("|"):
+        pat = ("(?<!\\w)" if re.match(r"\w", alt) else "") + re.escape(alt) + ("(?!\\w)" if re.search(r"\w$", alt) else "")
+        if re.search(pat, text, re.I):
+            return True
+    return False
+
+
+def judge(case, out):
+    """Return a list of failure reasons (empty list = pass)."""
+    fails = []
+    text, n_in, n_out = case["input"], len(case["input"].split()), len(out.split())
+    if not out.strip():
+        return ["empty output"]
+    fails += ["missing: " + t for t in case["must_contain"] if not has(t, out)]
+    fails += ["forbidden: " + t for t in case.get("must_not_contain", []) if has(t, out)]
+    if FILLER.search(out) and not FILLER.search(text):
+        fails.append("filler left in")
+    if n_out > 1.4 * n_in + 3:
+        fails.append("too long (%d words from %d): answered or added?" % (n_out, n_in))
+    if n_out < 0.45 * n_in:
+        fails.append("too short (%d words from %d): details dropped?" % (n_out, n_in))
+    if out.startswith("`") and out.endswith("`") and out.count("`") == 2 and n_out > 6:
+        fails.append("whole output in backticks")
+    return fails
+
+
+def cmd_prompts(args):
+    cases = load_json(EVAL / "prompt_cases.json")
+    if args.category:
+        cases = [c for c in cases if c["category"] in args.category]
+    llms = load_json(EVAL / "setups.json")["llm"]
+    out_root = RESULTS / "prompts"
+    out_root.mkdir(parents=True, exist_ok=True)
+    table = []
+    for pf in args.prompt:
+        system = (ROOT / pf).read_text(encoding="utf-8")
+        for name in args.llm:
+            label = Path(pf).stem + "__" + name
+            try:
+                run_llm(llms[name], system, "warm up")  # load the model first so timings are steady-state
+            except Exception as e:
+                print("%-22s skipped: %s" % (label, str(e)[:90]), file=sys.stderr)
+                continue
+            by_cat, fails, secs, rows = {}, [], 0.0, []
+            for c in cases:
+                t0 = time.perf_counter()
+                try:
+                    out = run_llm(llms[name], system, c["input"])
+                except Exception as e:
+                    out = ""
+                    print("%s %s ERROR %s" % (label, c["id"], e), file=sys.stderr)
+                dt = time.perf_counter() - t0
+                secs += dt
+                why = judge(c, out)
+                ok, tot = by_cat.get(c["category"], (0, 0))
+                by_cat[c["category"]] = (ok + (not why), tot + 1)
+                if why:
+                    fails.append((c["id"], c["input"], out, why))
+                rows.append({"id": c["id"], "output": out, "fail": why, "seconds": round(dt, 2)})
+            (out_root / (label + ".json")).write_text(json.dumps(rows, indent=1, ensure_ascii=False), encoding="utf-8")
+            passed = sum(v[0] for v in by_cat.values())
+            table.append((label, passed, len(cases), secs / max(1, len(cases)), by_cat))
+            print("%-22s %2d/%d pass   avg %.1fs" % (label, passed, len(cases), secs / max(1, len(cases))))
+            if args.verbose:
+                for cid, inp, out, why in fails:
+                    print("   FAIL %s: %s\n      in : %s\n      out: %s" % (cid, "; ".join(why), inp, out))
+    cats = sorted({c["category"] for c in cases})
+    print("\n%-22s " % "by category" + " ".join("%-11s" % x[:11] for x in cats))
+    for label, passed, total, avg, by_cat in table:
+        print("%-22s " % label + " ".join("%-11s" % ("%d/%d" % by_cat[x] if x in by_cat else "-") for x in cats))
+    print("\nper-case outputs: " + str(out_root))
+    return 0
+
+
 def cmd_score(args):
     run = RESULTS / args.run
     if not run.is_dir():
@@ -184,7 +267,8 @@ def cmd_score(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name, fn in (("list", cmd_list), ("stt", cmd_stt), ("llm", cmd_llm), ("score", cmd_score)):
+    for name, fn in (("list", cmd_list), ("stt", cmd_stt), ("llm", cmd_llm), ("score", cmd_score),
+                     ("prompts", cmd_prompts)):
         p = sub.add_parser(name)
         p.add_argument("--only", nargs="*", help="case ids to run")
         if name == "stt":
@@ -193,6 +277,11 @@ def main():
             p.add_argument("--stt", required=True, help="name of a finished stt run")
             p.add_argument("--llm", required=True)
             p.add_argument("--prompt", default="prompts/v1.md")
+        if name == "prompts":
+            p.add_argument("--prompt", nargs="+", required=True, help="prompt files, e.g. prompts/v4-en.md")
+            p.add_argument("--llm", nargs="+", required=True, help="llm setup names from setups.json")
+            p.add_argument("--category", nargs="*", help="only these categories")
+            p.add_argument("-v", "--verbose", action="store_true", help="print every failing case")
         if name == "score":
             p.add_argument("run", help="results dir name, e.g. stt-turbo-he or turbo-he__haiku")
         p.set_defaults(fn=fn)

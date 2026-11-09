@@ -65,6 +65,10 @@
     "llama3": {
       "kind": "ollama",
       "model": "llama3:latest"
+    },
+    "glossary": {
+      "kind": "glossary",
+      "rules": "prompts/glossary-en.json"
     }
   },
   "modes": {
@@ -75,7 +79,13 @@
       "prompt": "prompts/v3.md"
     },
     "english": {
-      "label": "English only (faster)",
+      "label": "English only (fastest, no rewrite)",
+      "stt": "turbo-en",
+      "llm": "glossary",
+      "prompt": null
+    },
+    "english-llm": {
+      "label": "English + AI rewrite (experimental)",
       "stt": "turbo-en",
       "llm": "llama3",
       "prompt": "prompts/v4-en.md"

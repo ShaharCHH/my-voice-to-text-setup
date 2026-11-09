@@ -108,7 +108,7 @@ class VoicePrompt(rumps.App):
     def _mode_parts(self, mode):
         m = self.setups["modes"][mode]
         return (self.setups["stt"][m["stt"]], self.setups["llm"][m["llm"]],
-                (ROOT / m["prompt"]).read_text(encoding="utf-8"))
+                (ROOT / m["prompt"]).read_text(encoding="utf-8") if m["prompt"] else "")
 
     def _mode_menu(self):
         menu = rumps.MenuItem("Mode")

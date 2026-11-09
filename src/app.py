@@ -35,7 +35,8 @@ def main():
     mode = setups["modes"][args.mode]
     stt_cfg = setups["stt"][args.stt or mode["stt"]]
     llm_cfg = setups["llm"][args.llm or mode["llm"]]
-    system = (ROOT / (args.prompt or mode["prompt"])).read_text(encoding="utf-8")
+    prompt_file = args.prompt or mode["prompt"]
+    system = (ROOT / prompt_file).read_text(encoding="utf-8") if prompt_file else ""
 
     if args.wav:
         heard, out, ts, tl = process_wav(args.wav, stt_cfg, llm_cfg, system)

@@ -5,6 +5,7 @@ so what the eval measures is exactly what the app runs.
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import urllib.error
@@ -81,12 +82,26 @@ def post_json(url, body, headers, timeout=120):
         raise RuntimeError("HTTP %d from %s: %s" % (e.code, url, e.read().decode("utf-8", "replace")[:300]))
 
 
+def apply_glossary(rules_file, text):
+    """Deterministic cleanup: regex find-and-replace rules from a JSON file. Cannot drop or
+    reword anything it has no rule for, which is why English mode uses it instead of an LLM."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, rules_file), encoding="utf-8") as f:
+        rules = json.load(f)
+    for r in rules:
+        text = re.sub(r["match"], r["to"], text, flags=re.I)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return text[:1].upper() + text[1:] if text and text[0].islower() else text
+
+
 def run_llm(cfg, system, transcript):
     # The transcript is wrapped in tags so the model treats it as data (see prompts/v1.md).
     user = "<transcript>\n" + transcript + "\n</transcript>"
     kind = cfg["kind"]
     if kind == "fake":
         return "FAKE OUTPUT: " + transcript
+    if kind == "glossary":
+        return apply_glossary(cfg["rules"], transcript)
     if kind == "ollama":
         host = cfg.get("host", "http://localhost:11434")
         r = post_json(host + "/api/chat", {

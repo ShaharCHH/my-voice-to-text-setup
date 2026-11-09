@@ -16,14 +16,17 @@ flowchart LR
 
 Two steps on purpose: Whisper only transcribes, then an LLM rewrites. That way a lost word can be traced to one stage or the other (see [Evaluation](#evaluation)).
 
-## Two modes
+## Modes
 
 Pick one from the menubar icon (🎙 → Mode). The choice is remembered.
 
-| Mode | Speech to text | LLM | Typical wait\* |
+| Mode | Speech to text | Text cleanup | Typical wait\* |
 |---|---|---|---|
-| **Hebrew + English** | Whisper large-v3-turbo, forced to Hebrew | Gemma 3 12B | ~6 to 15 s |
-| **English only** | same Whisper model, forced to English | Llama 3 8B | ~3 s |
+| **Hebrew + English** | Whisper large-v3-turbo, forced to Hebrew | Gemma 3 12B translates and tidies | ~6 to 15 s |
+| **English only** (default for English) | same model, forced to English | none: a glossary of find-and-replace rules (`prompts/glossary-en.json`) | ~2 s |
+| **English + AI rewrite** (experimental) | same | Llama 3 8B rewrites | ~3 s |
+
+Why English has no LLM by default: Whisper already adds punctuation and drops most "um"s, and on real dictations the rewrite step lost content (once 27 words became 4). A glossary can fix tool names (`cube control` becomes `kubectl`) but cannot delete a sentence. Hebrew needs the LLM, because it has to translate.
 
 \*Measured on an M1 MacBook Pro with a handful of short clips, not a benchmark. Run `src/stats.py` for your own numbers.
 
@@ -39,6 +42,15 @@ Pick one from the menubar icon (🎙 → Mode). The choice is remembered.
 Icon: 🎙 idle, 🔴 recording, ⏳ working. There is also a "Start at login" toggle.
 
 ## Setup (macOS, Apple Silicon)
+
+**One command** (installs only what is missing, safe to re-run):
+
+```bash
+scripts/install.sh --check   # look first, change nothing
+scripts/install.sh           # then fix whatever is missing and build the app
+```
+
+It needs [Homebrew](https://brew.sh). Below is what it does, if you prefer to do it by hand:
 
 ```bash
 brew install whisper.cpp portaudio ollama
@@ -81,15 +93,22 @@ Don't want your words stored? Set `"log_text": false` in `~/Library/Application 
 
 ## Evaluation
 
-`eval/run_eval.py` runs each Whisper setup (turbo, large-v3, ivrit-ai Hebrew fine-tune; forced `he` vs auto) over recorded clips and scores whether English terms survive. The recordings stay private, so results cannot be reproduced from this repo, but the harness and the prompts are here (`prompts/`, versioned; v4-en is the English default, v5-en is an experiment that handles spoken commands better but drops details more often).
+`eval/run_eval.py` runs each Whisper setup (turbo, large-v3, ivrit-ai Hebrew fine-tune; forced `he` vs auto) over recorded clips and scores whether English terms survive. The recordings stay private, so results cannot be reproduced from this repo, but the harness and the prompts are here (`prompts/`, versioned; v4-en is used by the experimental AI-rewrite mode, v5-en is a restructured variant that scored worse).
 
-First finding, on 4 mixed clips: no clear speech-model winner. Most "lost" tool names came out as Hebrew spellings (`אוסי` for `oc`), which the LLM step fixes using a glossary in the prompt. That glossary was tuned on those same 4 clips, so treat it as unproven until it is tested on new recordings. See [RESULTS.md](RESULTS.md).
+**Prompt test set.** `eval/prompt_cases.json` has 32 text-only cases (fillers, misheard tool names, spoken commands, self-corrections, injection attempts, long requests) that need no audio:
+
+```bash
+python3 eval/run_eval.py prompts --prompt prompts/v4-en.md --llm llama3 gemma -v
+```
+
+First finding on 4 mixed clips: no clear speech-model winner. Most "lost" tool names came out as Hebrew spellings (`אוסי` for `oc`), which the LLM step fixes using a glossary in the prompt. That glossary was tuned on those same 4 clips, so treat it as unproven until it is tested on new recordings. See [RESULTS.md](RESULTS.md).
 
 ## Layout
 
 ```
 src/core.py       hotkey state machine: record, transcribe, rewrite, paste, cancel
 src/backends.py   whisper.cpp / Ollama / Anthropic calls (shared with the eval)
+scripts/install.sh  one-command setup and check
 src/menubar.py    the menubar app        src/app.py   terminal version
 src/metrics.py    logs        src/stats.py   timings        src/transcripts.py   heard vs output
 prompts/          system prompts, versioned      eval/   harness and setups
