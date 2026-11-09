@@ -21,7 +21,7 @@ from src import login, metrics  # noqa: E402
 from src.core import IDLE, RECORDING, WORKING, Dictation, check_accessibility  # noqa: E402
 
 CONFIG = Path.home() / "Library" / "Application Support" / "VoicePrompt" / "config.json"
-DEFAULTS = {"mode": "hebrew", "hotkey": "alt_r"}
+DEFAULTS = {"mode": "hebrew", "hotkey": "alt_r", "log_text": True}
 ICONS = {IDLE: "🎙", RECORDING: "🔴", WORKING: "⏳"}
 ACCESSIBILITY_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
 
@@ -50,7 +50,8 @@ class VoicePrompt(rumps.App):
         stt_cfg, llm_cfg, system = self._mode_parts(self.cfg["mode"])
         self.dictation = Dictation(stt_cfg, llm_cfg, system, getattr(keyboard.Key, self.cfg["hotkey"]),
                                    log=lambda m: (print(m, flush=True), metrics.log_line(m)),
-                                   debug=lambda m: print(m, flush=True), mode=self.cfg["mode"])
+                                   debug=lambda m: print(m, flush=True), mode=self.cfg["mode"],
+                                   on_text=metrics.record_text if self.cfg["log_text"] else None)
         self.listener = keyboard.Listener(on_press=self.dictation.on_press,
                                           on_release=self.dictation.on_release)
         self.listener.start()

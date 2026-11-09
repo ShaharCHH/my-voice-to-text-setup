@@ -17,6 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+from src import metrics  # noqa: E402
 from src.core import Dictation, check_accessibility, process_wav  # noqa: E402
 
 
@@ -48,7 +49,7 @@ def main():
               "  then quit it completely (Cmd+Q) and reopen. Results will still be copied to the clipboard.",
               file=sys.stderr)
     d = Dictation(stt_cfg, llm_cfg, system, getattr(keyboard.Key, args.hotkey),
-                  debug=print, mode=args.mode)
+                  debug=print, mode=args.mode, on_text=metrics.record_text)
     print("Ready. Hold %s to talk (Esc = discard, double-tap = cancel). Ctrl+C to quit." % args.hotkey)
     with keyboard.Listener(on_press=d.on_press, on_release=d.on_release) as listener:
         listener.join()

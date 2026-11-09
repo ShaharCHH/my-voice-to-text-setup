@@ -79,16 +79,17 @@ def process_wav(wav, stt_cfg, llm_cfg, system, cancel=None, log=print):
 class Dictation:
     def __init__(self, stt_cfg, llm_cfg, system, hotkey, on_change=None, log=print, debug=None,
                  recorder_factory=recorder.Recorder, paster=paste, sounds=True,
-                 mode="", on_metric=metrics.record):
+                 mode="", on_metric=metrics.record, on_text=None):
         """hotkey / esc are pynput Key objects. on_change(state, last) is called on any change.
         log gets status lines without spoken text; debug (optional) also gets the transcripts.
-        on_metric(dict) gets one record per dictation (timings, sizes, outcome; no text)."""
+        on_metric(dict) gets one record per dictation (timings, sizes, outcome; no text).
+        on_text(heard, output, mode), if given, gets the transcript pair of each finished job."""
         from pynput import keyboard
         self.stt_cfg, self.llm_cfg, self.system = stt_cfg, llm_cfg, system
         self.hotkey, self.esc = hotkey, keyboard.Key.esc
         self.on_change, self.log = on_change, log
         self.debug = debug or (lambda m: None)
-        self.mode, self.on_metric = mode, on_metric
+        self.mode, self.on_metric, self.on_text = mode, on_metric, on_text
         self.paster, self.sounds = paster, sounds
         self.state = IDLE
         self.last = ""                 # last result text
@@ -214,6 +215,8 @@ class Dictation:
                 rec["outcome"] = "cancelled"
                 return
             self.debug("heard : %s\noutput: %s" % (heard, out))
+            if self.on_text and out:
+                self.on_text(heard, out, self.mode)
             if not out:
                 rec["outcome"] = "empty"
                 self._finish(cancel, IDLE, "nothing heard")

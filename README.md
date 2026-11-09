@@ -63,17 +63,25 @@ open "dist/Voice Prompt.app"
 
 Prefer a terminal? `.venv/bin/python src/app.py --mode english` does the same thing. Add `--wav file.wav` to test without a microphone.
 
-## Metrics
+## Logs
 
-Every dictation appends one line to `~/Library/Logs/VoicePrompt/dictations.jsonl`: audio length, time spent in each step, and the outcome. **What you said is never written to disk.**
+Two files in `~/Library/Logs/VoicePrompt/` (outside the repo, never committed):
+
+| File | Contains | Spoken text? |
+|---|---|---|
+| `dictations.jsonl` | audio length, time per step, outcome | no |
+| `transcripts.jsonl` | what Whisper heard and what the LLM produced | **yes** |
 
 ```bash
-.venv/bin/python src/stats.py --last 20   # median / p90 / max per mode
+.venv/bin/python src/stats.py --last 20         # median / p90 / max timings per mode
+.venv/bin/python src/transcripts.py --last 5    # Whisper text next to the LLM output
 ```
+
+Don't want your words stored? Set `"log_text": false` in `~/Library/Application Support/VoicePrompt/config.json`.
 
 ## Evaluation
 
-`eval/run_eval.py` runs each Whisper setup (turbo, large-v3, ivrit-ai Hebrew fine-tune; forced `he` vs auto) over recorded clips and scores whether English terms survive. The recordings stay private, so results cannot be reproduced from this repo, but the harness and the prompts (`prompts/`, versioned v1 to v4) are here.
+`eval/run_eval.py` runs each Whisper setup (turbo, large-v3, ivrit-ai Hebrew fine-tune; forced `he` vs auto) over recorded clips and scores whether English terms survive. The recordings stay private, so results cannot be reproduced from this repo, but the harness and the prompts are here (`prompts/`, versioned; v4-en is the English default, v5-en is an experiment that handles spoken commands better but drops details more often).
 
 First finding, on 4 mixed clips: no clear speech-model winner. Most "lost" tool names came out as Hebrew spellings (`אוסי` for `oc`), which the LLM step fixes using a glossary in the prompt. That glossary was tuned on those same 4 clips, so treat it as unproven until it is tested on new recordings. See [RESULTS.md](RESULTS.md).
 
@@ -83,7 +91,7 @@ First finding, on 4 mixed clips: no clear speech-model winner. Most "lost" tool 
 src/core.py       hotkey state machine: record, transcribe, rewrite, paste, cancel
 src/backends.py   whisper.cpp / Ollama / Anthropic calls (shared with the eval)
 src/menubar.py    the menubar app        src/app.py   terminal version
-src/metrics.py    logs        src/stats.py   timing summary
+src/metrics.py    logs        src/stats.py   timings        src/transcripts.py   heard vs output
 prompts/          system prompts, versioned      eval/   harness and setups
 ```
 
