@@ -1,6 +1,1 @@
-[
-  {"id": "c01", "audio": "recordings/c01.m4a",   "category": "mixed", "must_contain": ["Trident", "PVC", "NFS"]},
-  {"id": "c02", "audio": "recordings/c02.m4a", "category": "mixed", "must_contain": ["pod", "kubectl", "oc"]},
-  {"id": "c03", "audio": "recordings/c03.m4a", "category": "mixed", "must_contain": ["LLM"]},
-  {"id": "c04", "audio": "recordings/c04.m4a", "category": "mixed", "must_contain": ["PXE"]}
-]
+[]

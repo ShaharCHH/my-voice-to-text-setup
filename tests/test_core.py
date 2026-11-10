@@ -40,7 +40,7 @@ def slow_stt(cfg, wav, cancel=None):
 
 class CoreTests(unittest.TestCase):
     def setUp(self):
-        for target, fake in (("run_stt", slow_stt), ("run_llm", lambda c, s, t: "OUT: " + t)):
+        for target, fake in (("run_stt", slow_stt), ("clean_text", lambda cfg, text: "OUT: " + text)):
             patcher = mock.patch.object(core, target, fake)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -50,8 +50,8 @@ class CoreTests(unittest.TestCase):
         def paster(text):
             self.pasted.append(text)
             return paste_ok
-        d = core.Dictation({}, {}, "system", K.alt_r, log=lambda m: None, paster=paster, sounds=False,
-                           recorder_factory=lambda: FakeRecorder(audio), mode="test", on_metric=self.metrics.append)
+        d = core.Dictation({}, {}, K.alt_r, log=lambda m: None, paster=paster, sounds=False,
+                           recorder_factory=lambda: FakeRecorder(audio), stt_name="test", on_metric=self.metrics.append)
         self.addCleanup(d.cancel)
         return d
 

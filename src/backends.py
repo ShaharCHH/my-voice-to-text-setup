@@ -1,15 +1,13 @@
-"""STT and LLM backends, shared by the eval harness and the live app.
+"""Speech-to-text and text cleanup, shared by the eval harness and the live app.
 
-Stdlib only. Keep this the single place that talks to whisper-cli / Ollama / Anthropic,
-so what the eval measures is exactly what the app runs.
+Stdlib only, no network. Keep this the single place that runs whisper-cli and the cleanup
+rules, so what the eval measures is exactly what the app runs.
 """
 import json
 import os
 import re
 import shutil
 import subprocess
-import urllib.error
-import urllib.request
 from os.path import expanduser
 
 
@@ -39,7 +37,7 @@ def run_stt(cfg, wav, cancel=None):
             find_binary(cfg.get("bin", "whisper-cli")),
             "-m", expanduser(cfg["model"]),
             "-f", str(wav),
-            "-l", cfg.get("language", "he"),  # "he" forces Hebrew, "auto" detects
+            "-l", cfg.get("language", "en"),
             "-nt",  # no timestamps in output
             "-np",  # no progress/debug prints
         ]
@@ -69,22 +67,9 @@ def run_stt(cfg, wav, cancel=None):
     raise ValueError("unknown stt kind: " + kind)
 
 
-def post_json(url, body, headers, timeout=120):
-    req = urllib.request.Request(
-        url, data=json.dumps(body).encode("utf-8"),
-        headers=dict(headers, **{"content-type": "application/json"}),
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.loads(r.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        # Surface the API's own error text; a bare "HTTP 400" hides the cause.
-        raise RuntimeError("HTTP %d from %s: %s" % (e.code, url, e.read().decode("utf-8", "replace")[:300]))
-
-
 def apply_glossary(rules_file, text):
     """Deterministic cleanup: regex find-and-replace rules from a JSON file. Cannot drop or
-    reword anything it has no rule for, which is why English mode uses it instead of an LLM."""
+    reword anything it has no rule for, which is why we use rules and not an LLM."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     with open(os.path.join(root, rules_file), encoding="utf-8") as f:
         rules = json.load(f)
@@ -93,18 +78,7 @@ def apply_glossary(rules_file, text):
     return re.sub(r"\s{2,}", " ", text).strip()
 
 
-def unload_ollama(cfg):
-    """Free an Ollama model's memory right away (keep_alive 0). No-op for other backends; never raises."""
-    if cfg.get("kind") != "ollama":
-        return
-    try:
-        post_json(cfg.get("host", "http://localhost:11434") + "/api/generate",
-                  {"model": cfg["model"], "keep_alive": 0}, {}, timeout=10)
-    except Exception:
-        pass  # Ollama not running = nothing loaded
-
-
-# Spoken editing commands for the no-LLM mode. A command must be a clause of its own
+# Spoken editing commands for dictation. A command must be a clause of its own
 # (start of text or right after . ! ? , ; :) and be followed by punctuation or the end, so
 # "I think we should delete that file." and "delete everything in the namespace" are left alone.
 _BOUNDARY = r"(?:^|(?<=[.!?,;:]\s))"
@@ -147,32 +121,12 @@ def apply_voice_commands(text):
     return _capitalise(text) if cut else text
 
 
-def run_llm(cfg, system, transcript):
-    # The transcript is wrapped in tags so the model treats it as data (see prompts/v1.md).
-    user = "<transcript>\n" + transcript + "\n</transcript>"
+def clean_text(cfg, text):
+    """Turn Whisper's text into the text we paste: glossary rules, then spoken edits."""
     kind = cfg["kind"]
     if kind == "fake":
-        return "FAKE OUTPUT: " + transcript
+        return "FAKE OUTPUT: " + text
     if kind == "glossary":
-        text = apply_glossary(cfg["rules"], transcript)
+        text = apply_glossary(cfg["rules"], text)
         return apply_voice_commands(text) if cfg.get("voice_commands", True) else text
-    if kind == "ollama":
-        host = cfg.get("host", "http://localhost:11434")
-        r = post_json(host + "/api/chat", {
-            "model": cfg["model"], "stream": False,
-            "keep_alive": cfg.get("keep_alive", "10m"),  # stay loaded between dictations, then free the RAM
-            "options": {"temperature": 0},
-            "messages": [{"role": "system", "content": system},
-                         {"role": "user", "content": user}],
-        }, {})
-        return r["message"]["content"].strip()
-    if kind == "anthropic":
-        key = os.environ.get("ANTHROPIC_API_KEY")
-        if not key:
-            raise RuntimeError("ANTHROPIC_API_KEY is not set")
-        r = post_json("https://api.anthropic.com/v1/messages", {
-            "model": cfg["model"], "max_tokens": 1024, "temperature": 0, "system": system,
-            "messages": [{"role": "user", "content": user}],
-        }, {"x-api-key": key, "anthropic-version": "2023-06-01"})
-        return r["content"][0]["text"].strip()
-    raise ValueError("unknown llm kind: " + kind)
+    raise ValueError("unknown cleanup kind: " + kind)

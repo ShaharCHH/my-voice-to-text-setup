@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 from src import metrics, recorder
-from src.backends import Cancelled, run_llm, run_stt
+from src.backends import Cancelled, clean_text, run_stt
 
 MIN_SECONDS = 0.5     # shorter than this is an accidental tap
 MIN_RMS = 150.0       # quieter than this is silence (int16 scale); Whisper would hallucinate
@@ -73,34 +73,32 @@ def paste(text):
     return True
 
 
-def process_wav(wav, stt_cfg, llm_cfg, system, cancel=None, log=print):
-    """wav -> (heard, output, stt_seconds, llm_seconds). Raises Cancelled if cancel is set."""
+def process_wav(wav, stt_cfg, cleanup_cfg, cancel=None, log=print):
+    """wav -> (heard, output, stt_seconds, cleanup_seconds). Raises Cancelled if cancel is set."""
     t0 = time.perf_counter()
     heard = run_stt(stt_cfg, wav, cancel)
     t1 = time.perf_counter()
     if not heard.strip():
         return heard, "", t1 - t0, 0.0
-    log("heard (%.1fs): %s\ntranslating..." % (t1 - t0, heard))
-    out = run_llm(llm_cfg, system, heard)
-    if cancel is not None and cancel.is_set():
-        raise Cancelled()  # Ollama cannot be interrupted; we just drop its answer
+    log("heard (%.1fs): %s" % (t1 - t0, heard))
+    out = clean_text(cleanup_cfg, heard)
     return heard, out, t1 - t0, time.perf_counter() - t1
 
 
 class Dictation:
-    def __init__(self, stt_cfg, llm_cfg, system, hotkey, on_change=None, log=print, debug=None,
+    def __init__(self, stt_cfg, cleanup_cfg, hotkey, on_change=None, log=print, debug=None,
                  recorder_factory=recorder.Recorder, paster=paste, sounds=True,
-                 mode="", on_metric=metrics.record, on_text=None):
+                 stt_name="", on_metric=metrics.record, on_text=None):
         """hotkey / esc are pynput Key objects. on_change(state, last) is called on any change.
         log gets status lines without spoken text; debug (optional) also gets the transcripts.
         on_metric(dict) gets one record per dictation (timings, sizes, outcome; no text).
-        on_text(heard, output, mode), if given, gets the transcript pair of each finished job."""
+        on_text(heard, output, stt_name), if given, gets the transcript pair of each finished job."""
         from pynput import keyboard
-        self.stt_cfg, self.llm_cfg, self.system = stt_cfg, llm_cfg, system
+        self.stt_cfg, self.cleanup_cfg = stt_cfg, cleanup_cfg
         self.hotkey, self.esc = hotkey, keyboard.Key.esc
         self.on_change, self.log = on_change, log
         self.debug = debug or (lambda m: None)
-        self.mode, self.on_metric, self.on_text = mode, on_metric, on_text
+        self.stt_name, self.on_metric, self.on_text = stt_name, on_metric, on_text
         self.paster, self.sounds = paster, sounds
         self.state = IDLE
         self.last = ""                 # last result text
@@ -111,10 +109,6 @@ class Dictation:
         self._cancel = threading.Event()
         self._last_tap = 0.0
         self._lock = threading.Lock()
-
-    def set_mode(self, stt_cfg, llm_cfg, system, mode=""):
-        """Switch models/prompt. A job already running keeps what it started with."""
-        self.stt_cfg, self.llm_cfg, self.system, self.mode = stt_cfg, llm_cfg, system, mode
 
     # ---- helpers ----
     def _set(self, state, message=""):
@@ -197,8 +191,8 @@ class Dictation:
     def _work(self, audio, cancel):
         t_start = time.perf_counter()          # ~ the moment the key was released
         dur, level = recorder.seconds(audio), recorder.rms(audio)
-        rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "mode": self.mode, "audio_s": round(dur, 2),
-               "stt_s": None, "llm_s": None, "paste_s": None, "total_s": None,
+        rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "stt": self.stt_name, "audio_s": round(dur, 2),
+               "stt_s": None, "clean_s": None, "paste_s": None, "total_s": None,
                "chars_in": None, "chars_out": None, "outcome": "error"}
         try:
             if dur < MIN_SECONDS or level < MIN_RMS:
@@ -208,12 +202,12 @@ class Dictation:
                 self._finish(cancel, IDLE, "too short or silent")
                 return
             self.log("recorded %.1fs (level %.0f), transcribing..." % (dur, level))
-            stt_cfg, llm_cfg, system = self.stt_cfg, self.llm_cfg, self.system  # snapshot
+            stt_cfg, cleanup_cfg = self.stt_cfg, self.cleanup_cfg  # snapshot
             try:
                 with tempfile.TemporaryDirectory() as d:
                     wav = Path(d) / "clip.wav"
                     recorder.save_wav(audio, wav)
-                    heard, out, ts, tl = process_wav(wav, stt_cfg, llm_cfg, system, cancel, self.debug)
+                    heard, out, ts, tl = process_wav(wav, stt_cfg, cleanup_cfg, cancel, self.debug)
             except Cancelled:
                 rec["outcome"] = "cancelled"
                 return  # state was already reset by whoever cancelled
@@ -222,13 +216,13 @@ class Dictation:
                 self._sound("Basso")
                 self._finish(cancel, IDLE, "error: %s" % str(e)[:60])
                 return
-            rec.update(stt_s=round(ts, 2), llm_s=round(tl, 2), chars_in=len(heard), chars_out=len(out))
+            rec.update(stt_s=round(ts, 2), clean_s=round(tl, 2), chars_in=len(heard), chars_out=len(out))
             if cancel.is_set():
                 rec["outcome"] = "cancelled"
                 return
             self.debug("heard : %s\noutput: %s" % (heard, out))
             if self.on_text and out:
-                self.on_text(heard, out, self.mode)
+                self.on_text(heard, out, self.stt_name)
             if not out:
                 rec["outcome"] = "empty"
                 self._finish(cancel, IDLE, "nothing heard")
@@ -239,7 +233,7 @@ class Dictation:
             rec["paste_s"] = round(time.perf_counter() - t_paste, 2)
             rec["outcome"] = "done" if ok else "paste_failed"
             self._sound("Pop" if ok else "Basso")
-            self.log("done: stt %.1fs, llm %.1fs, audio %.1fs" % (ts, tl, dur))
+            self.log("done: stt %.1fs, cleanup %.2fs, audio %.1fs" % (ts, tl, dur))
             self._finish(cancel, IDLE, "done" if ok else "paste failed (copied to clipboard)")
         finally:
             rec["total_s"] = round(time.perf_counter() - t_start, 2)

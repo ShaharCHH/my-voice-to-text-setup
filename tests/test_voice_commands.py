@@ -1,12 +1,12 @@
-"""Spoken editing commands for the no-LLM mode. Run: python3 -m unittest discover -s tests -v"""
+"""Spoken editing commands and the glossary. Run: .venv/bin/python -m unittest discover -s tests -v"""
 import sys
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.backends import apply_voice_commands as vc, run_llm  # noqa: E402
+from src.backends import apply_voice_commands as vc, clean_text  # noqa: E402
 
-NO_LLM = {"kind": "glossary", "rules": "prompts/glossary-en.json"}  # the exact config English mode uses
+CLEANUP = {"kind": "glossary", "rules": "glossary/en.json"}  # what the app uses by default
 
 
 class FiresOn(unittest.TestCase):
@@ -51,23 +51,23 @@ class EndToEnd(unittest.TestCase):
     """Through the same function the app calls: commands, then glossary, then capital letter."""
 
     def test_user_scenario(self):
-        out = run_llm(NO_LLM, "", "Write a script to delete the pods. Delete everything and start from here. "
+        out = clean_text(CLEANUP, "Write a script to delete the pods. Delete everything and start from here. "
                                   "cube control get pods in the kube deck namespace.")
         self.assertEqual(out, "kubectl get pods in the Kube Deck namespace.")
 
     def test_scratch_then_capitalised(self):
-        self.assertEqual(run_llm(NO_LLM, "", "Explain DNS. Scratch that, explain TLS."), "Explain TLS.")
+        self.assertEqual(clean_text(CLEANUP, "Explain DNS. Scratch that, explain TLS."), "Explain TLS.")
 
     def test_tool_name_not_capitalised_after_a_cut(self):
-        self.assertEqual(run_llm(NO_LLM, "", "Explain DNS. Start over. Cube control get nodes."), "kubectl get nodes.")
+        self.assertEqual(clean_text(CLEANUP, "Explain DNS. Start over. Cube control get nodes."), "kubectl get nodes.")
 
     def test_dictation_starting_with_a_tool_name_is_not_capitalised(self):
-        self.assertEqual(run_llm(NO_LLM, "", "cube control get pods in the staging namespace."),
+        self.assertEqual(clean_text(CLEANUP, "cube control get pods in the staging namespace."),
                          "kubectl get pods in the staging namespace.")
 
     def test_commands_can_be_switched_off(self):
         text = "Explain DNS. Scratch that. Explain TLS."
-        self.assertEqual(run_llm({**NO_LLM, "voice_commands": False}, "", text), text)
+        self.assertEqual(clean_text({**CLEANUP, "voice_commands": False}, text), text)
 
 
 class LeavesAlone(unittest.TestCase):
