@@ -157,6 +157,7 @@ class Dictation:
         self._set(RECORDING, "recording...")
         self.log("recording... (release to stop, Esc to discard)")
         self._timer = threading.Timer(MAX_SECONDS, lambda: self.on_release(self.hotkey))
+        self._timer.daemon = True  # else quitting mid-recording would wait up to MAX_SECONDS
         self._timer.start()
 
     def _stop_timer(self):
