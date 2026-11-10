@@ -1,5 +1,7 @@
 # Results
 
+> **Historical.** Everything below was measured while the project still had Hebrew and LLM modes. Both were removed afterwards (the reasons are in "Real dictations beat the synthetic set"); that code lives at the git tag `hebrew-support`. Paths such as `prompts/`, `eval/setups.json` and `eval/prompt_cases.json` exist only at that tag.
+
 Raw outputs live in `eval/results/` (gitignored, real speech). Summarise findings here.
 
 ## STT-only, 4 cases (all mixed Hebrew + English), 2026-11-09

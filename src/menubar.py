@@ -8,7 +8,6 @@ import json
 import os
 import subprocess
 import sys
-import threading
 from pathlib import Path
 
 # The .app sets VOICEPROMPT_ROOT (see setup.py); from source fall back to this file's location.
@@ -19,11 +18,10 @@ import rumps  # noqa: E402
 from pynput import keyboard  # noqa: E402
 
 from src import login, metrics  # noqa: E402
-from src.backends import unload_ollama  # noqa: E402
 from src.core import IDLE, RECORDING, WORKING, Dictation, check_accessibility  # noqa: E402
 
 CONFIG = Path.home() / "Library" / "Application Support" / "VoicePrompt" / "config.json"
-DEFAULTS = {"mode": "hebrew", "hotkey": "alt_r", "log_text": True}
+DEFAULTS = {"hotkey": "alt_r", "log_text": True}
 ICONS = {IDLE: "🎙", RECORDING: "🔴", WORKING: "⏳"}
 ACCESSIBILITY_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
 
@@ -37,22 +35,16 @@ def load_config():
     return cfg
 
 
-def save_config(cfg):
-    CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-
-
 class VoicePrompt(rumps.App):
     def __init__(self):
         super().__init__("Voice Prompt", title=ICONS[IDLE], quit_button=None)
         self.cfg = load_config()
-        self.setups = json.loads((ROOT / "eval" / "setups.json").read_text(encoding="utf-8"))
-        if self.cfg["mode"] not in self.setups["modes"]:
-            self.cfg["mode"] = DEFAULTS["mode"]
-        stt_cfg, llm_cfg, system = self._mode_parts(self.cfg["mode"])
-        self.dictation = Dictation(stt_cfg, llm_cfg, system, getattr(keyboard.Key, self.cfg["hotkey"]),
+        settings = json.loads((ROOT / "settings.json").read_text(encoding="utf-8"))
+        default = settings["default"]
+        self.dictation = Dictation(settings["stt"][default["stt"]], settings["cleanup"][default["cleanup"]],
+                                   getattr(keyboard.Key, self.cfg["hotkey"]),
                                    log=lambda m: (print(m, flush=True), metrics.log_line(m)),
-                                   debug=lambda m: print(m, flush=True), mode=self.cfg["mode"],
+                                   debug=lambda m: print(m, flush=True), stt_name=default["stt"],
                                    on_text=metrics.record_text if self.cfg["log_text"] else None)
         self.listener = keyboard.Listener(on_press=self.dictation.on_press,
                                           on_release=self.dictation.on_release)
@@ -61,12 +53,11 @@ class VoicePrompt(rumps.App):
         self.status = rumps.MenuItem("Ready")
         self.last = rumps.MenuItem("Last result: (none yet)", callback=self.copy_last)
         self.cancel_item = rumps.MenuItem("Cancel (or Esc / double-tap)")
-        self.mode_menu = self._mode_menu()
         self.logs_item = rumps.MenuItem("Open logs folder", callback=lambda _: subprocess.run(["open", str(metrics.log_dir())]))
         self.login_item = rumps.MenuItem("Start at login", callback=self.toggle_login)
         self.login_item.state = 1 if login.is_enabled() else 0
         self.access_item = rumps.MenuItem("⚠ Allow Accessibility (needed to paste)", callback=self.open_access)
-        self.menu = [self.status, self.last, self.cancel_item, None, self.mode_menu,
+        self.menu = [self.status, self.last, self.cancel_item, None,
                      self.logs_item, self.login_item, self.access_item, None, rumps.MenuItem("Quit", callback=self.quit)]
         self.access_item.hidden = check_accessibility()
         self.timer = rumps.Timer(self.refresh, 0.3)  # UI updates on the main thread, not from workers
@@ -107,32 +98,8 @@ class VoicePrompt(rumps.App):
             login.enable(path)
             item.state = 1
 
-    def _mode_parts(self, mode):
-        m = self.setups["modes"][mode]
-        return (self.setups["stt"][m["stt"]], self.setups["llm"][m["llm"]],
-                (ROOT / m["prompt"]).read_text(encoding="utf-8") if m["prompt"] else "")
-
-    def _mode_menu(self):
-        menu = rumps.MenuItem("Mode")
-        for key, m in self.setups["modes"].items():
-            item = rumps.MenuItem(m["label"], callback=lambda it, k=key: self.choose_mode(k))
-            item.state = 1 if key == self.cfg["mode"] else 0
-            menu.add(item)
-        return menu
-
-    def choose_mode(self, key):
-        self.cfg["mode"] = key
-        save_config(self.cfg)
-        old_llm = self.dictation.llm_cfg
-        self.dictation.set_mode(*self._mode_parts(key), mode=key)
-        if old_llm != self.dictation.llm_cfg:  # free the previous model's memory (several GB)
-            threading.Thread(target=unload_ollama, args=(old_llm,), daemon=True).start()
-        for k, it in zip(self.setups["modes"], self.mode_menu.values()):
-            it.state = 1 if k == key else 0
-
     def quit(self, _):
         self.listener.stop()
-        unload_ollama(self.dictation.llm_cfg)
         rumps.quit_application()
 
 

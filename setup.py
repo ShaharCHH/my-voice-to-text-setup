@@ -2,8 +2,8 @@
 
   .venv/bin/python setup.py py2app -A      # alias mode: the app runs this folder's source live
 
-Alias mode means edits to src/ and prompts/ apply on next launch with no rebuild.
-The app needs whisper-cli (brew) and Ollama installed; it does not bundle them.
+Alias mode means edits to src/ and glossary/ apply on next launch with no rebuild.
+The app needs whisper-cli (brew install whisper.cpp); it does not bundle it.
 """
 from pathlib import Path
 

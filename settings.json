@@ -1,0 +1,27 @@
+{
+  "default": {
+    "stt": "turbo-en",
+    "cleanup": "glossary"
+  },
+  "stt": {
+    "fake": {
+      "kind": "fake"
+    },
+    "turbo-en": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ggml-large-v3-turbo.bin",
+      "language": "en",
+      "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"
+    }
+  },
+  "cleanup": {
+    "fake": {
+      "kind": "fake"
+    },
+    "glossary": {
+      "kind": "glossary",
+      "rules": "glossary/en.json",
+      "voice_commands": true
+    }
+  }
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Show what Whisper heard next to what the LLM produced (from transcripts.jsonl).
+"""Show what Whisper heard next to what we pasted (from transcripts.jsonl).
 
   .venv/bin/python src/transcripts.py            # last 5
   .venv/bin/python src/transcripts.py --last 20
@@ -22,7 +22,7 @@ def main():
         sys.exit("no transcripts yet: %s" % path)
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     for r in rows[-args.last:]:
-        print("[%s] %s\n  HEARD : %s\n  OUTPUT: %s\n" % (r["ts"], r.get("mode") or "?", r["heard"], r["output"]))
+        print("[%s] %s\n  HEARD : %s\n  OUTPUT: %s\n" % (r["ts"], r.get("stt") or r.get("mode") or "?", r["heard"], r["output"]))
 
 
 if __name__ == "__main__":

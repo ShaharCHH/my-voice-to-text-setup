@@ -14,15 +14,13 @@ PIP_PINS=("pyobjc-core<12" "pyobjc-framework-Cocoa<12" "pyobjc-framework-Quartz<
 PIP_PKGS=(sounddevice pynput numpy rumps py2app)
 
 CHECK=0
-WITH_LLAMA3=0
 MISSING=0
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/install.sh [--check] [--with-llama3]
+Usage: scripts/install.sh [--check]
 
   --check       only report what is missing; change nothing (exit 1 if anything is)
-  --with-llama3 also pull llama3 (only needed to re-run the model comparison in eval/)
   -h, --help    show this help
 USAGE
 }
@@ -30,7 +28,6 @@ USAGE
 for arg in "$@"; do
   case "$arg" in
     --check) CHECK=1 ;;
-    --with-llama3) WITH_LLAMA3=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $arg" >&2; usage >&2; exit 2 ;;
   esac
@@ -56,26 +53,8 @@ if ! command -v brew >/dev/null 2>&1; then
   echo "Homebrew is required: https://brew.sh (not installed automatically)" >&2
   exit 1
 fi
-for formula in whisper.cpp portaudio ollama; do
+for formula in whisper.cpp portaudio; do
   if brew list --formula "$formula" >/dev/null 2>&1; then ok "$formula"; else fix "$formula" brew install "$formula"; fi
-done
-
-echo "== ollama server and models"
-if curl -sf -m 3 http://localhost:11434/api/tags >/dev/null 2>&1; then
-  ok "ollama is running"
-else
-  fix "ollama is not running" brew services start ollama
-  [ "$CHECK" -eq 1 ] || sleep 3
-fi
-models=(gemma3:12b qwen2.5:7b)
-[ "$WITH_LLAMA3" -eq 1 ] && models+=(llama3:latest)
-for m in "${models[@]}"; do
-  # awk reads all input, so no SIGPIPE under pipefail (grep -q would exit early)
-  if ollama list 2>/dev/null | awk -v m="$m" 'NR > 1 && $1 == m { f = 1 } END { exit !f }'; then
-    ok "model $m"
-  else
-    fix "model $m" ollama pull "$m"
-  fi
 done
 
 echo "== whisper model"
@@ -131,5 +110,5 @@ cat <<NEXT
 Ready. Start it:   open "$APP"
 First run only: System Settings > Privacy & Security > add "Voice Prompt" to
   Microphone, Accessibility and Input Monitoring, then quit and reopen it.
-Terminal version:  .venv/bin/python src/app.py --mode english
+Terminal version:  .venv/bin/python src/app.py
 NEXT

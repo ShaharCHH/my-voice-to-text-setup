@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarise ~/Library/Logs/VoicePrompt/dictations.jsonl (timings per mode).
+"""Summarise ~/Library/Logs/VoicePrompt/dictations.jsonl (timings per speech setup).
 
   .venv/bin/python src/stats.py            # all dictations
   .venv/bin/python src/stats.py --last 20  # only the most recent 20
@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src import metrics  # noqa: E402
 
-FIELDS = ("audio_s", "stt_s", "llm_s", "paste_s", "total_s")
+FIELDS = ("audio_s", "stt_s", "clean_s", "paste_s", "total_s")
 
 
 def pct(vals, p):
@@ -34,7 +34,9 @@ def main():
         rows = rows[-args.last:]
     by_mode = defaultdict(list)
     for r in rows:
-        by_mode[r.get("mode") or "?"].append(r)
+        if "clean_s" not in r:
+            r["clean_s"] = r.get("llm_s")  # records written before the LLM was removed
+        by_mode[r.get("stt") or r.get("mode") or "?"].append(r)
     for mode, rs in sorted(by_mode.items()):
         print("== %s: %d dictations   outcomes: %s" % (mode, len(rs), dict(Counter(r["outcome"] for r in rs))))
         done = [r for r in rs if r["outcome"] == "done"]

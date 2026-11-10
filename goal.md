@@ -1,3 +1,5 @@
+> **Superseded.** This is the original plan (Hebrew-to-English voice prompting with local LLMs). The project is now English-only dictation with a glossary and spoken edits; see README.md. The Hebrew/LLM implementation is preserved at the git tag `hebrew-support`.
+
 # Hebrew → English Voice Prompting
 
 Speak Hebrew (mixed with English tech terms), get a clean English prompt pasted into whatever I'm typing in (Claude, Claude Code, etc.). Free, local-first, Wispr Flow-style.

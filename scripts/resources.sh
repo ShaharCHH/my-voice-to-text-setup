@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Show what Voice Prompt costs your Mac right now: CPU and memory of the app, Whisper and
-# Ollama, plus which models are loaded. Read-only. Use --watch to keep it updating.
+# Show what Voice Prompt costs your Mac right now: CPU and memory of the app and of Whisper.
+# Read-only. Use --watch to keep it updating.
 set -euo pipefail
 
 INTERVAL=0
@@ -35,25 +35,16 @@ snapshot() {
     /awk/ { next }
     /Voice Prompt\.app\/Contents\/MacOS/ { add("1 Voice Prompt app") }
     /whisper-cli/                        { add("2 whisper-cli (only while transcribing)") }
-    /ollama serve|\/bin\/ollama/         { add("3 ollama server") }
-    /llama-server|ollama runner/         { add("4 ollama model runner (the loaded LLM)") }
     END {
       printf "%-42s %5s %7s %9s\n", "PROCESS", "COUNT", "CPU %", "MEM (MB)"
-      for (k = 1; k <= 4; k++)
+      for (k = 1; k <= 2; k++)
         for (name in n) if (substr(name, 1, 1) == k)
           { printf "%-42s %5d %7.1f %9.0f\n", substr(name, 3), n[name], cpu[name], mb[name]; tc += cpu[name]; tm += mb[name]; shown[k] = 1 }
-      for (k = 1; k <= 4; k++) if (!shown[k]) {
-        split("Voice Prompt app|whisper-cli (only while transcribing)|ollama server|ollama model runner (the loaded LLM)", lab, "|")
+      for (k = 1; k <= 2; k++) if (!shown[k]) {
+        split("Voice Prompt app|whisper-cli (only while transcribing)", lab, "|")
         printf "%-42s %5s %7s %9s\n", lab[k], "-", "-", "-" }
       printf "%-42s %5s %7.1f %9.0f\n", "TOTAL", "", tc, tm
     }'
-  echo
-  echo "Models loaded in Ollama (what is using the big memory):"
-  if curl -sf -m 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
-    ollama ps | sed 's/^/  /'
-  else
-    echo "  Ollama is not running"
-  fi
   echo
   free=$(memory_pressure 2>/dev/null | awk -F': ' '/free percentage/ {print $2}')
   echo "System memory free: ${free:-unknown}"

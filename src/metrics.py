@@ -2,7 +2,7 @@
 
   dictations.jsonl   one JSON line per dictation: timings, sizes, outcome. NO spoken text.
   app.log            status messages with timestamps. No spoken text either.
-  transcripts.jsonl  what Whisper heard and what the LLM produced, side by side (spoken text!).
+  transcripts.jsonl  what Whisper heard and what we pasted, side by side (spoken text!).
                      Local only; turn off with "log_text": false in config.json.
 
 Override the folder with VOICEPROMPT_LOG_DIR (used by the tests).
@@ -28,10 +28,10 @@ def record(rec):
         pass
 
 
-def record_text(heard, output, mode=""):
-    """Append the Whisper transcript and the LLM output so the two can be compared later."""
+def record_text(heard, output, stt=""):
+    """Append the Whisper transcript and the cleaned output so the two can be compared later."""
     try:
-        rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "mode": mode, "heard": heard, "output": output}
+        rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "stt": stt, "heard": heard, "output": output}
         with open(log_dir() / "transcripts.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except OSError:
