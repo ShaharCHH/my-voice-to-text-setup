@@ -48,6 +48,12 @@ def main():
             v = [r[f] for r in done if r.get(f) is not None]
             if v:
                 print("   %-8s %7.1f %7.1f %7.1f" % (f.replace("_s", ""), statistics.median(v), pct(v, 0.9), max(v)))
+        levels = [r["level"] for r in rs if r.get("level") is not None]
+        if levels:
+            print("   speech level: median %d, lowest %d (skipped below 150)" % (statistics.median(levels), min(levels)))
+        capped = sum(1 for r in rs if r.get("capped"))
+        if capped:
+            print("   %d recording(s) stopped by the time limit" % capped)
         ratio = [r["total_s"] / r["audio_s"] for r in done if r.get("audio_s")]
         if ratio:
             print("   total/audio: median %.2fx (goal.md target: <= 0.5x)" % statistics.median(ratio))

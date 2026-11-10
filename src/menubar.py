@@ -17,11 +17,11 @@ sys.path.insert(0, str(ROOT))
 import rumps  # noqa: E402
 from pynput import keyboard  # noqa: E402
 
-from src import login, metrics  # noqa: E402
+from src import diagnostics, login, metrics  # noqa: E402
 from src.core import IDLE, RECORDING, WORKING, Dictation, check_accessibility  # noqa: E402
 
 CONFIG = Path.home() / "Library" / "Application Support" / "VoicePrompt" / "config.json"
-DEFAULTS = {"hotkey": "alt_r", "log_text": True}
+DEFAULTS = {"hotkey": "alt_r", "log_text": True, "max_seconds": 90}
 ICONS = {IDLE: "🎙", RECORDING: "🔴", WORKING: "⏳"}
 ACCESSIBILITY_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
 
@@ -44,7 +44,7 @@ class VoicePrompt(rumps.App):
         self.dictation = Dictation(settings["stt"][default["stt"]], settings["cleanup"][default["cleanup"]],
                                    getattr(keyboard.Key, self.cfg["hotkey"]),
                                    log=lambda m: (print(m, flush=True), metrics.log_line(m)),
-                                   debug=lambda m: print(m, flush=True), stt_name=default["stt"],
+                                   debug=lambda m: print(m, flush=True), stt_name=default["stt"], max_seconds=self.cfg["max_seconds"],
                                    on_text=metrics.record_text if self.cfg["log_text"] else None)
         self.listener = keyboard.Listener(on_press=self.dictation.on_press,
                                           on_release=self.dictation.on_release)
@@ -103,5 +103,18 @@ class VoicePrompt(rumps.App):
         rumps.quit_application()
 
 
+def announce_previous_crash():
+    """If the last session died, say so once (rumps notifications can fail unsigned; the log is the record)."""
+    crash = diagnostics.previous_crash()
+    if crash:
+        metrics.log_line("previous session crashed; trace saved to %s" % crash.name)
+        try:
+            rumps.notification("Voice Prompt", "The previous session crashed", "Trace saved: %s (Open logs folder)" % crash.name)
+        except Exception:
+            pass
+
+
 if __name__ == "__main__":
+    announce_previous_crash()
+    diagnostics.install()
     VoicePrompt().run()

@@ -48,3 +48,16 @@ def save_wav(audio, path):
         w.setsampwidth(2)
         w.setframerate(RATE)
         w.writeframes(audio.tobytes())
+
+
+def speech_level(audio, window_ms=50):
+    """How loud the speech is, 0..32767: the 95th-percentile loudness of 50 ms windows.
+
+    The whole-clip average (rms) drops when there are pauses, so a short phrase in a long
+    silence looked 'silent' and could be skipped. The loud windows are the speech, so use them.
+    """
+    n = int(RATE * window_ms / 1000)
+    if len(audio) < n:
+        return rms(audio)
+    windows = audio[: len(audio) // n * n].astype("float32").reshape(-1, n)
+    return float(np.percentile(np.sqrt((windows ** 2).mean(axis=1)), 95))

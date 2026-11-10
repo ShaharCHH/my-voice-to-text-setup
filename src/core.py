@@ -1,10 +1,10 @@
-"""Dictation core: hotkey state machine + record -> STT -> LLM -> paste.
+"""Dictation core: hotkey state machine + record -> speech-to-text -> cleanup -> paste.
 
 No UI in here, so the CLI (app.py) and the menubar app (menubar.py) share it.
 
 States: idle -> recording -> working -> idle
   hold hotkey            idle -> recording
-  release hotkey         recording -> working (transcribe, translate, paste)
+  release hotkey         recording -> working (transcribe, clean up, paste)
   Esc while recording    recording -> idle   (recording thrown away)
   double-tap hotkey      working -> idle     (job cancelled, nothing pasted)
 """
@@ -19,8 +19,10 @@ from src import metrics, recorder
 from src.backends import Cancelled, clean_text, run_stt
 
 MIN_SECONDS = 0.5     # shorter than this is an accidental tap
-MIN_RMS = 150.0       # quieter than this is silence (int16 scale); Whisper would hallucinate
-MAX_SECONDS = 60      # safety cap: stop recording if the key-release is ever missed
+MIN_LEVEL = 150.0     # speech quieter than this (int16 scale, see recorder.speech_level) is skipped; Whisper hallucinates on silence
+LOW_LEVEL = 450.0     # pastes fine, but tell the user the microphone is quiet (accuracy suffers well before the gate)
+MAX_SECONDS = 90      # recording stops by itself here (guards a missed key release)
+WARN_BEFORE = 10      # ...and a warning sound plays this many seconds earlier
 DOUBLE_TAP = 0.4      # two hotkey presses within this many seconds cancel a running job
 
 IDLE, RECORDING, WORKING = "idle", "recording", "working"
@@ -88,7 +90,8 @@ def process_wav(wav, stt_cfg, cleanup_cfg, cancel=None, log=print):
 class Dictation:
     def __init__(self, stt_cfg, cleanup_cfg, hotkey, on_change=None, log=print, debug=None,
                  recorder_factory=recorder.Recorder, paster=paste, sounds=True,
-                 stt_name="", on_metric=metrics.record, on_text=None):
+                 stt_name="", on_metric=metrics.record, on_text=None,
+                 max_seconds=MAX_SECONDS, warn_before=WARN_BEFORE):
         """hotkey / esc are pynput Key objects. on_change(state, last) is called on any change.
         log gets status lines without spoken text; debug (optional) also gets the transcripts.
         on_metric(dict) gets one record per dictation (timings, sizes, outcome; no text).
@@ -105,7 +108,9 @@ class Dictation:
         self.message = ""              # short status for the UI
         self._rec = recorder_factory()
         self._down = False             # hotkey physically held (filters key auto-repeat)
-        self._timer = None
+        self.max_seconds, self.warn_before = max_seconds, warn_before
+        self._timer = self._warn_timer = None
+        self._capped = False           # the current recording was stopped by the time limit
         self._cancel = threading.Event()
         self._last_tap = 0.0
         self._lock = threading.Lock()
@@ -122,6 +127,31 @@ class Dictation:
 
     # ---- key events (call from the pynput listener thread) ----
     def on_press(self, key):
+        try:
+            self._on_press(key)
+        except Exception as e:
+            self._recover("key press", e)
+
+    def on_release(self, key):
+        try:
+            self._on_release(key)
+        except Exception as e:
+            self._recover("key release", e)
+
+    def _recover(self, where, error):
+        """An exception escaping into pynput's listener thread would end that thread, and with it
+        the hotkey, silently. Log it, reset to idle and carry on."""
+        try:
+            self.log("ERROR in %s: %r" % (where, error))
+            self._sound("Basso")
+            with self._lock:
+                self._down = False
+                self._stop_timer()
+                self.state, self.message = IDLE, "error: %s" % str(error)[:60]  # not _set(): its UI callback may be what broke
+        except Exception:
+            pass  # last line of defence: never raise into the listener thread
+
+    def _on_press(self, key):
         with self._lock:
             if key == self.esc and self.state == RECORDING:
                 self._abort_recording()
@@ -135,7 +165,7 @@ class Dictation:
                         self._cancel_work()
                     self._last_tap = now
 
-    def on_release(self, key):
+    def _on_release(self, key):
         with self._lock:
             if key != self.hotkey:
                 return
@@ -146,18 +176,41 @@ class Dictation:
     # ---- transitions (lock held) ----
     def _start_recording(self):
         self._cancel = threading.Event()
-        self._rec.start()
+        self._capped = False
+        try:
+            self._rec.start()
+        except Exception as e:  # e.g. microphone permission revoked, or no input device
+            self.log("microphone error: %r" % e)
+            self._sound("Basso")
+            self._set(IDLE, "microphone unavailable: %s" % str(e)[:50])
+            return
         self._sound("Tink")
         self._set(RECORDING, "recording...")
         self.log("recording... (release to stop, Esc to discard)")
-        self._timer = threading.Timer(MAX_SECONDS, lambda: self.on_release(self.hotkey))
-        self._timer.daemon = True  # else quitting mid-recording would wait up to MAX_SECONDS
-        self._timer.start()
+        # daemon timers: else quitting mid-recording would wait for them
+        self._timer = threading.Timer(self.max_seconds, self._cap)
+        self._warn_timer = threading.Timer(max(0.0, self.max_seconds - self.warn_before), self._warn)
+        for t in (self._timer, self._warn_timer):
+            t.daemon = True
+            t.start()
+
+    def _warn(self):
+        with self._lock:
+            if self.state == RECORDING:
+                self._sound("Funk")
+                self._set(RECORDING, "%d s left, then it stops" % round(self.warn_before))
+
+    def _cap(self):
+        """Time limit reached: stop as if the key had been released, and remember that we did."""
+        self._capped = True
+        self.log("time limit (%d s) reached, stopping" % self.max_seconds)
+        self.on_release(self.hotkey)
 
     def _stop_timer(self):
-        if self._timer:
-            self._timer.cancel()  # else a stale timer could cut off the next recording
-            self._timer = None
+        for t in (self._timer, self._warn_timer):
+            if t:
+                t.cancel()  # else a stale timer could cut off the next recording
+        self._timer = self._warn_timer = None
 
     def _abort_recording(self):
         self._stop_timer()
@@ -171,7 +224,7 @@ class Dictation:
         audio = self._rec.stop()
         self._set(WORKING, "transcribing...")
         # off the listener thread, or the keyboard hook stalls while we work
-        threading.Thread(target=self._work, args=(audio, self._cancel), daemon=True).start()
+        threading.Thread(target=self._work, args=(audio, self._cancel, self._capped), daemon=True).start()
 
     def _cancel_work(self):
         self._cancel.set()
@@ -188,18 +241,21 @@ class Dictation:
                 self._abort_recording()
 
     # ---- the job ----
-    def _work(self, audio, cancel):
+    def _work(self, audio, cancel, capped=False):
         t_start = time.perf_counter()          # ~ the moment the key was released
-        dur, level = recorder.seconds(audio), recorder.rms(audio)
+        dur, level = recorder.seconds(audio), recorder.speech_level(audio)
         rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "stt": self.stt_name, "audio_s": round(dur, 2),
                "stt_s": None, "clean_s": None, "paste_s": None, "total_s": None,
-               "chars_in": None, "chars_out": None, "outcome": "error"}
+               "chars_in": None, "chars_out": None, "level": round(level), "capped": capped,
+               "outcome": "error"}
         try:
-            if dur < MIN_SECONDS or level < MIN_RMS:
+            if dur < MIN_SECONDS or level < MIN_LEVEL:
                 rec["outcome"] = "skipped"
-                self.log("skipped (%.1fs, level %.0f)" % (dur, level))
+                why = ("too short (%.1f s)" % dur if dur < MIN_SECONDS
+                       else "too quiet (level %.0f): speak up or check the microphone" % level)
+                self.log("skipped: " + why)
                 self._sound("Basso")
-                self._finish(cancel, IDLE, "too short or silent")
+                self._finish(cancel, IDLE, "skipped, " + why)
                 return
             self.log("recorded %.1fs (level %.0f), transcribing..." % (dur, level))
             stt_cfg, cleanup_cfg = self.stt_cfg, self.cleanup_cfg  # snapshot
@@ -234,7 +290,15 @@ class Dictation:
             rec["outcome"] = "done" if ok else "paste_failed"
             self._sound("Pop" if ok else "Basso")
             self.log("done: stt %.1fs, cleanup %.2fs, audio %.1fs" % (ts, tl, dur))
-            self._finish(cancel, IDLE, "done" if ok else "paste failed (copied to clipboard)")
+            note = "done (stopped at the %d s limit)" % self.max_seconds if capped else "done"
+            if level < LOW_LEVEL:
+                note += ", but the microphone is quiet (level %.0f): raise Sound > Input volume" % level
+            self._finish(cancel, IDLE, note if ok else "paste failed (copied to clipboard)")
+        except Exception as e:  # anything unexpected: never leave the UI stuck on "working"
+            self.log("ERROR: %r" % e)
+            rec["outcome"] = "error"
+            self._sound("Basso")
+            self._finish(cancel, IDLE, "error: %s" % str(e)[:60])
         finally:
             rec["total_s"] = round(time.perf_counter() - t_start, 2)
             self.on_metric(rec)
