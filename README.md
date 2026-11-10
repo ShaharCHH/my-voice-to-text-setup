@@ -27,7 +27,7 @@ Typical wait after you release the key: about **2 s** (median of 15 real dictati
 | **Double-tap** Right Option while it is working | Cancel, nothing is pasted |
 | 🎙 icon → Cancel | Same as either of the above |
 
-Icon: 🎙 idle, 🔴 recording, ⏳ working. The menu also has "Start at login", the last result (click to copy) and a logs folder shortcut. Recordings stop automatically after 60 seconds.
+Icon: 🎙 idle, 🔴 recording, ⏳ working. The menu also has "Start at login", the last result (click to copy) and a logs folder shortcut. A warning sound plays 10 seconds before the 90-second limit, where recording stops by itself (`"max_seconds"` in the config file). If the microphone is very quiet, the menu says so after the dictation.
 
 ### Spoken edits
 Say these as their own sentence (Whisper's punctuation marks the edges):
@@ -83,7 +83,7 @@ Files in `~/Library/Logs/VoicePrompt/` (outside the repo, never committed):
 
 | File | Contains | Spoken text? |
 |---|---|---|
-| `dictations.jsonl` | audio length, seconds per step, outcome | no |
+| `dictations.jsonl` | audio length, seconds per step, speech level, outcome | no |
 | `transcripts.jsonl` | what Whisper heard next to what was pasted | **yes** |
 
 ```bash
@@ -92,12 +92,12 @@ Files in `~/Library/Logs/VoicePrompt/` (outside the repo, never committed):
 scripts/resources.sh --watch                    # CPU and memory, live
 ```
 
-Don't want your words stored? Set `"log_text": false` in `~/Library/Application Support/VoicePrompt/config.json`. Measured: the app idles at ~100 MB and ~2 % CPU; Whisper peaks around 1.9 GB for about 2 s per dictation.
+If the app ever dies, `crash.log` holds the stack of every thread, and the next start shows a notification and files it as `crash-<time>.log`. Don't want your words stored? Set `"log_text": false` in `~/Library/Application Support/VoicePrompt/config.json`. Measured: the app idles at ~100 MB and ~2 % CPU; Whisper peaks around 1.9 GB for about 2 s per dictation.
 
 ## Tests and evaluation
 
 ```bash
-.venv/bin/python -m unittest discover -s tests   # 27 tests: state machine, spoken edits, glossary
+.venv/bin/python -m unittest discover -s tests   # state machine, failure handling, loudness, spoken edits, glossary
 ```
 
 `eval/run_eval.py` runs a speech setup over your own recordings and checks that listed terms survive (`list`, `stt`, `clean`, `score`). Recordings stay private, so add your own clips to `eval/cases.json`.

@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from src import metrics  # noqa: E402
+from src import diagnostics, metrics  # noqa: E402
 from src.core import Dictation, check_accessibility, process_wav  # noqa: E402
 
 
@@ -36,6 +36,7 @@ def main():
         return 0
 
     from pynput import keyboard
+    diagnostics.install()
     if not check_accessibility():
         print("WARNING: this terminal is NOT trusted for Accessibility, so pasting will not work.\n"
               "  System Settings > Privacy & Security > Accessibility: remove and re-add your terminal app,\n"
