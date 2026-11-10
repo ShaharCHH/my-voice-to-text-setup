@@ -12,6 +12,30 @@
       "model": "~/models/whisper/ggml-large-v3-turbo.bin",
       "language": "en",
       "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"
+    },
+    "turbo-en-noprompt": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ggml-large-v3-turbo.bin",
+      "language": "en"
+    },
+    "turbo-en-context": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ggml-large-v3-turbo.bin",
+      "language": "en",
+      "prompt": "Technical dictation about Kubernetes, OpenShift, ArgoCD, Terraform, AWS, kubectl and oc commands."
+    },
+    "turbo-en-norm": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ggml-large-v3-turbo.bin",
+      "language": "en",
+      "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform",
+      "normalize": true
+    },
+    "large-en": {
+      "kind": "whisper-cpp",
+      "model": "~/models/whisper/ggml-large-v3.bin",
+      "language": "en",
+      "prompt": "oc, kubectl, ArgoCD, Trident, HAProxy, RHCOS, OpenShift, Terraform"
     }
   },
   "cleanup": {

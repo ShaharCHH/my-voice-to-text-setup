@@ -1,0 +1,366 @@
+[
+ {
+  "id": "pla01",
+  "category": "plain",
+  "say": "Please summarize the main trade-offs between a monolith and microservices.",
+  "expected": "Please summarize the main trade-offs between a monolith and microservices.",
+  "terms": [
+   "trade-offs",
+   "monolith",
+   "microservices"
+  ]
+ },
+ {
+  "id": "pla02",
+  "category": "plain",
+  "say": "Can you review this function and tell me if it handles the empty list correctly?",
+  "expected": "Can you review this function and tell me if it handles the empty list correctly?",
+  "terms": [
+   "function",
+   "empty list"
+  ]
+ },
+ {
+  "id": "pla03",
+  "category": "plain",
+  "say": "Thanks, that worked. Now let's move on to the next step.",
+  "expected": "Thanks, that worked. Now let's move on to the next step.",
+  "terms": [
+   "worked",
+   "next step"
+  ]
+ },
+ {
+  "id": "kub01",
+  "category": "kubernetes",
+  "say": "Run kubectl get pods in the staging namespace and show me the ones that are not running.",
+  "expected": "Run kubectl get pods in the staging namespace and show me the ones that are not running.",
+  "terms": [
+   "kubectl",
+   "pods",
+   "staging",
+   "namespace"
+  ]
+ },
+ {
+  "id": "kub02",
+  "category": "kubernetes",
+  "say": "Why is the ArgoCD application stuck in OutOfSync after the last upgrade?",
+  "expected": "Why is the ArgoCD application stuck in OutOfSync after the last upgrade?",
+  "terms": [
+   "ArgoCD",
+   "OutOfSync"
+  ]
+ },
+ {
+  "id": "kub03",
+  "category": "kubernetes",
+  "say": "The PVC is stuck in Pending and the Trident provisioner shows no events.",
+  "expected": "The PVC is stuck in Pending and the Trident provisioner shows no events.",
+  "terms": [
+   "PVC",
+   "Pending",
+   "Trident"
+  ]
+ },
+ {
+  "id": "kub04",
+  "category": "kubernetes",
+  "say": "Check the HAProxy router pods in the openshift-ingress namespace.",
+  "expected": "Check the HAProxy router pods in the openshift-ingress namespace.",
+  "terms": [
+   "HAProxy",
+   "openshift-ingress"
+  ]
+ },
+ {
+  "id": "kub05",
+  "category": "kubernetes",
+  "say": "Use oc debug node to look at the disk usage on the worker.",
+  "expected": "Use oc debug node to look at the disk usage on the worker.",
+  "terms": [
+   "oc debug node",
+   "worker"
+  ]
+ },
+ {
+  "id": "kub06",
+  "category": "kubernetes",
+  "say": "Explain the difference between a Deployment and a StatefulSet.",
+  "expected": "Explain the difference between a Deployment and a StatefulSet.",
+  "terms": [
+   "Deployment",
+   "StatefulSet"
+  ]
+ },
+ {
+  "id": "kub07",
+  "category": "kubernetes",
+  "say": "The RHCOS node is NotReady and the kubelet keeps restarting.",
+  "expected": "The RHCOS node is NotReady and the kubelet keeps restarting.",
+  "terms": [
+   "RHCOS",
+   "NotReady",
+   "kubelet"
+  ]
+ },
+ {
+  "id": "kub08",
+  "category": "kubernetes",
+  "say": "Configure PXE boot so the new worker joins the cluster automatically.",
+  "expected": "Configure PXE boot so the new worker joins the cluster automatically.",
+  "terms": [
+   "PXE",
+   "worker"
+  ]
+ },
+ {
+  "id": "kub09",
+  "category": "kubernetes",
+  "say": "Add a readiness probe and set the resource requests and limits on the container.",
+  "expected": "Add a readiness probe and set the resource requests and limits on the container.",
+  "terms": [
+   "readiness probe",
+   "requests",
+   "limits"
+  ]
+ },
+ {
+  "id": "kub10",
+  "category": "kubernetes",
+  "say": "Why does my pod keep ending up in CrashLoopBackOff?",
+  "expected": "Why does my pod keep ending up in CrashLoopBackOff?",
+  "terms": [
+   "CrashLoopBackOff"
+  ]
+ },
+ {
+  "id": "clo01",
+  "category": "cloud",
+  "say": "Write a Terraform module that creates an S3 bucket with versioning enabled.",
+  "expected": "Write a Terraform module that creates an S3 bucket with versioning enabled.",
+  "terms": [
+   "Terraform",
+   "S3",
+   "versioning"
+  ]
+ },
+ {
+  "id": "clo02",
+  "category": "cloud",
+  "say": "Run terraform plan with the out flag and show me the diff.",
+  "expected": "Run terraform plan with the out flag and show me the diff.",
+  "terms": [
+   "terraform plan",
+   "diff"
+  ]
+ },
+ {
+  "id": "clo03",
+  "category": "cloud",
+  "say": "Create an IAM role that the Lambda function can assume and attach a read-only policy.",
+  "expected": "Create an IAM role that the Lambda function can assume and attach a read-only policy.",
+  "terms": [
+   "IAM",
+   "Lambda",
+   "read-only"
+  ]
+ },
+ {
+  "id": "clo04",
+  "category": "cloud",
+  "say": "Add a CloudWatch alarm that fires when the SQS queue depth goes above 1000.",
+  "expected": "Add a CloudWatch alarm that fires when the SQS queue depth goes above 1000.",
+  "terms": [
+   "CloudWatch",
+   "SQS",
+   "1000|1,000"
+  ]
+ },
+ {
+  "id": "clo05",
+  "category": "cloud",
+  "say": "The EKS cluster has two node groups in private subnets behind a NAT gateway.",
+  "expected": "The EKS cluster has two node groups in private subnets behind a NAT gateway.",
+  "terms": [
+   "EKS",
+   "node groups",
+   "NAT gateway"
+  ]
+ },
+ {
+  "id": "clo06",
+  "category": "cloud",
+  "say": "Why does the security group block traffic on port 443 from the load balancer?",
+  "expected": "Why does the security group block traffic on port 443 from the load balancer?",
+  "terms": [
+   "security group",
+   "443",
+   "load balancer"
+  ]
+ },
+ {
+  "id": "dev01",
+  "category": "dev",
+  "say": "Create a feature branch, commit the changes, and open a pull request against main.",
+  "expected": "Create a feature branch, commit the changes, and open a pull request against main.",
+  "terms": [
+   "feature branch",
+   "pull request",
+   "main"
+  ]
+ },
+ {
+  "id": "dev02",
+  "category": "dev",
+  "say": "Write a Python script that reads a JSON file and prints every key.",
+  "expected": "Write a Python script that reads a JSON file and prints every key.",
+  "terms": [
+   "Python",
+   "JSON"
+  ]
+ },
+ {
+  "id": "dev03",
+  "category": "dev",
+  "say": "Search the logs for the word timeout and sort the results by timestamp.",
+  "expected": "Search the logs for the word timeout and sort the results by timestamp.",
+  "terms": [
+   "logs",
+   "timeout",
+   "timestamp"
+  ]
+ },
+ {
+  "id": "dev04",
+  "category": "dev",
+  "say": "Set the environment variable to production and restart the service with systemctl.",
+  "expected": "Set the environment variable to production and restart the service with systemctl.",
+  "terms": [
+   "environment variable",
+   "systemctl"
+  ]
+ },
+ {
+  "id": "dev05",
+  "category": "dev",
+  "say": "The unit tests pass locally but the CI pipeline fails on the lint step.",
+  "expected": "The unit tests pass locally but the CI pipeline fails on the lint step.",
+  "terms": [
+   "unit tests",
+   "CI",
+   "lint"
+  ]
+ },
+ {
+  "id": "num01",
+  "category": "numbers",
+  "say": "Upgrade the cluster from version 4.14 to version 4.16 during the maintenance window.",
+  "expected": "Upgrade the cluster from version 4.14 to version 4.16 during the maintenance window.",
+  "terms": [
+   "4.14",
+   "4.16"
+  ]
+ },
+ {
+  "id": "num02",
+  "category": "numbers",
+  "say": "The database is about two terabytes and needs to move to Aurora with minimal downtime.",
+  "expected": "The database is about two terabytes and needs to move to Aurora with minimal downtime.",
+  "terms": [
+   "Aurora",
+   "downtime",
+   "two terabytes|2 terabytes|2 TB"
+  ]
+ },
+ {
+  "id": "num03",
+  "category": "numbers",
+  "say": "Allocate 8 gigabytes of memory and 4 CPUs to each replica.",
+  "expected": "Allocate 8 gigabytes of memory and 4 CPUs to each replica.",
+  "terms": [
+   "8 gigabytes|8 GB",
+   "4 CPUs",
+   "replica"
+  ]
+ },
+ {
+  "id": "acr01",
+  "category": "acronyms",
+  "say": "The API returns a 403 when the JWT has expired.",
+  "expected": "The API returns a 403 when the JWT has expired.",
+  "terms": [
+   "API",
+   "403",
+   "JWT"
+  ]
+ },
+ {
+  "id": "acr02",
+  "category": "acronyms",
+  "say": "Check whether the DNS record points at the right load balancer.",
+  "expected": "Check whether the DNS record points at the right load balancer.",
+  "terms": [
+   "DNS",
+   "load balancer"
+  ]
+ },
+ {
+  "id": "acr03",
+  "category": "acronyms",
+  "say": "Enable TLS on the ingress and rotate the certificate before it expires.",
+  "expected": "Enable TLS on the ingress and rotate the certificate before it expires.",
+  "terms": [
+   "TLS",
+   "ingress",
+   "certificate"
+  ]
+ },
+ {
+  "id": "pro01",
+  "category": "project",
+  "say": "Add a to-do item in the Kube Deck project and sort the list by its identifier.",
+  "expected": "Add a to-do item in the Kube Deck project and sort the list by its identifier.",
+  "terms": [
+   "Kube Deck",
+   "to-do",
+   "identifier"
+  ]
+ },
+ {
+  "id": "edi01",
+  "category": "edits",
+  "say": "Write a script to list pods. Scratch that. Write a script to list nodes.",
+  "expected": "Write a script to list nodes.",
+  "terms": [
+   "list nodes"
+  ]
+ },
+ {
+  "id": "edi02",
+  "category": "edits",
+  "say": "Explain how DNS works. Start over. Explain how TLS works.",
+  "expected": "Explain how TLS works.",
+  "terms": [
+   "TLS"
+  ]
+ },
+ {
+  "id": "edi03",
+  "category": "edits",
+  "say": "Create a bucket in the first region. No, never mind. Scratch that. Create a bucket in the second region.",
+  "expected": "Create a bucket in the second region.",
+  "terms": [
+   "second region"
+  ]
+ },
+ {
+  "id": "edi04",
+  "category": "edits",
+  "say": "Delete everything and start from here. Write a haiku about servers.",
+  "expected": "Write a haiku about servers.",
+  "terms": [
+   "haiku"
+  ]
+ }
+]

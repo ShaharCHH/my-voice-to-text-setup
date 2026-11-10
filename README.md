@@ -94,13 +94,20 @@ scripts/resources.sh --watch                    # CPU and memory, live
 
 If the app ever dies, `crash.log` holds the stack of every thread, and the next start shows a notification and files it as `crash-<time>.log`. Don't want your words stored? Set `"log_text": false` in `~/Library/Application Support/VoicePrompt/config.json`. Measured: the app idles at ~100 MB and ~2 % CPU; Whisper peaks around 1.9 GB for about 2 s per dictation.
 
-## Tests and evaluation
+## Tests and the accuracy test
 
 ```bash
-.venv/bin/python -m unittest discover -s tests   # state machine, failure handling, loudness, spoken edits, glossary
+.venv/bin/python -m unittest discover -s tests   # state machine, failure handling, loudness, scoring, spoken edits, glossary
 ```
 
-`eval/run_eval.py` runs a speech setup over your own recordings and checks that listed terms survive (`list`, `stt`, `clean`, `score`). Recordings stay private, so add your own clips to `eval/cases.json`.
+**Accuracy test.** Which Whisper setup is best on *your* voice and *your* vocabulary? Read 35 prepared sentences aloud once (about 8 minutes, in a normal terminal, at your normal microphone and volume), then compare setups:
+
+```bash
+.venv/bin/python eval/record_cases.py
+.venv/bin/python eval/run_eval.py compare --stt turbo-en turbo-en-noprompt turbo-en-context turbo-en-norm large-en -v
+```
+
+Setups live in `settings.json`: the current model, no vocabulary hint, a hint written as a sentence, volume normalisation (`"normalize": true`, for a quiet microphone), and the bigger `large-v3`. The first one named is the baseline. The report gives word error rate on Whisper's raw text and on the text that would be pasted, how many tool names survived, speed, and a clip-by-clip win/loss count against the baseline, because with 35 clips a small gap is noise. Recordings stay on your machine (gitignored).
 
 ## History
 
