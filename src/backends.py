@@ -3,11 +3,15 @@
 Stdlib only, no network. Keep this the single place that runs whisper-cli and the cleanup
 rules, so what the eval measures is exactly what the app runs.
 """
+import array
 import json
 import os
 import re
 import shutil
+import struct
 import subprocess
+import tempfile
+import wave
 from os.path import expanduser
 
 
@@ -27,11 +31,56 @@ class Cancelled(Exception):
     """The user aborted this dictation."""
 
 
+def read_pcm16(path):
+    """Samples of a 16-bit mono WAV. Finds the data chunk by hand because macOS tools write
+    'extensible' headers that Python's wave module rejects."""
+    with open(path, "rb") as f:
+        b = f.read()
+    i = b.index(b"data")
+    n = struct.unpack("<I", b[i + 4:i + 8])[0]
+    samples = array.array("h")
+    samples.frombytes(b[i + 8:i + 8 + n])
+    return samples
+
+
+def normalized_copy(wav, target_peak=0.5, max_gain=30.0):
+    """Louden a quiet recording. Returns (path, is_temporary). Gain is set from the 99.5th
+    percentile (not the maximum), so one keyboard thump cannot hold the whole clip down,
+    and capped, so room noise in a nearly silent clip is not blown up."""
+    samples = read_pcm16(wav)
+    loud = sorted(abs(x) for x in samples)
+    ref = loud[int(0.995 * (len(loud) - 1))] if loud else 0
+    gain = min(max_gain, target_peak * 32767 / ref) if ref else 1.0
+    if gain <= 1.1:  # already loud enough
+        return str(wav), False
+    out = array.array("h", (max(-32768, min(32767, int(x * gain))) for x in samples))
+    fd, path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(out.tobytes())
+    return path, True
+
+
 def run_stt(cfg, wav, cancel=None):
-    """cancel: optional threading.Event; when set, whisper-cli is killed and Cancelled raised."""
-    kind = cfg["kind"]
-    if kind == "fake":
+    """cancel: optional threading.Event; when set, whisper-cli is killed and Cancelled raised.
+    cfg["normalize"]: true = louden quiet audio first."""
+    if cfg["kind"] == "fake":
         return "FAKE TRANSCRIPT oc get pods"
+    temporary = False
+    if cfg.get("normalize"):
+        wav, temporary = normalized_copy(wav)
+    try:
+        return _whisper_cpp(cfg, wav, cancel)
+    finally:
+        if temporary:
+            os.unlink(wav)
+
+
+def _whisper_cpp(cfg, wav, cancel):
+    kind = cfg["kind"]
     if kind == "whisper-cpp":
         cmd = [
             find_binary(cfg.get("bin", "whisper-cli")),

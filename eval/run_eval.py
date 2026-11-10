@@ -1,189 +1,202 @@
 #!/usr/bin/env python3
-"""Run a speech-to-text setup over recorded clips and score how well tool names survive.
+"""Compare speech-to-text setups on recordings of known sentences.
 
-Stdlib only (macOS system Python 3.9 is enough). Two stages, so you can tell whether a term
-was lost by Whisper or by the cleanup rules:
+You read eval/sentences.json aloud once (eval/record_cases.py), then:
 
-  list                         show cases, audio/reference presence, duration
-  stt   --setup NAME           audio -> text                   (results/stt-NAME/)
-  clean --stt NAME             saved text -> pasted text       (results/NAME__clean/)
-  score RUN                    score a results dir (term check, latency, review sheet)
+  list                          which sentences have a recording
+  compare --stt A B C ...       run each setup over the recordings and score it
 
-Setups live in settings.json, cases in eval/cases.json (audio path, must_contain terms).
-Recordings and results stay on your machine (gitignored): they are your voice.
+Scores: word error rate (WER, lower is better) on Whisper's raw text and on the text that
+would be pasted (after the glossary and spoken edits), and how many of the tool names
+survived. The first setup named is the baseline the others are compared against.
+
+Stdlib only. Recordings (your voice) and results stay on your machine, gitignored.
 """
 import argparse
+import hashlib
 import json
 import re
-import subprocess
+import statistics
 import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from src.backends import clean_text, run_stt  # noqa: E402  (shared with the live app)
+from src.backends import clean_text, read_pcm16, run_stt  # noqa: E402  (shared with the live app)
 
 EVAL = ROOT / "eval"
-CACHE = EVAL / ".cache"
-RESULTS = EVAL / "results"
-REFERENCE = EVAL / "reference"
+RESULTS = EVAL / "results" / "compare"
+DEFAULT_AUDIO = ROOT / "recordings"
 
+
+# ---------- scoring ----------
+
+def tokens(text):
+    """Lowercase words for comparison. Keeps 'to-do', '4.14', "don't" as one word; '1,000' becomes '1000'."""
+    text = re.sub(r"(?<=\d),(?=\d{3})", "", text.lower())
+    return re.findall(r"[a-z0-9]+(?:[-.'][a-z0-9]+)*", text)
+
+
+def edit_distance(ref, hyp):
+    """Word-level Levenshtein distance (substitutions + insertions + deletions)."""
+    prev = list(range(len(hyp) + 1))
+    for i, r in enumerate(ref, 1):
+        cur = [i]
+        for j, h in enumerate(hyp, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (r != h)))
+        prev = cur
+    return prev[-1]
+
+
+def term_found(spec, text):
+    """spec 'a|b' = either spelling. Case-insensitive, whole words where the edge is a word character."""
+    for alt in spec.split("|"):
+        pat = ("(?<![\\w])" if re.match(r"\w", alt) else "") + re.escape(alt) + ("(?![\\w])" if re.search(r"\w$", alt) else "")
+        if re.search(pat, text, re.I):
+            return True
+    return False
+
+
+# ---------- data ----------
 
 def load_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def select_cases(only):
-    cases = load_json(EVAL / "cases.json")
+def load_cases(audio_dir, categories=None, only=None):
+    cases = load_json(EVAL / "sentences.json")
+    if categories:
+        cases = [c for c in cases if c["category"] in categories]
     if only:
         cases = [c for c in cases if c["id"] in only]
-        if not cases:
-            sys.exit("no cases match --only")
+    for c in cases:
+        c["wav"] = Path(audio_dir) / (c["id"] + ".wav")
     return cases
 
 
-def wav_for(case):
-    """16 kHz mono WAV (what whisper.cpp wants). afconvert ships with macOS."""
-    CACHE.mkdir(parents=True, exist_ok=True)
-    src = ROOT / case["audio"]
-    wav = CACHE / (case["id"] + ".wav")
-    if not wav.exists() or wav.stat().st_mtime < src.stat().st_mtime:
-        subprocess.run(
-            ["afconvert", "-f", "WAVE", "-d", "LEI16@16000", "-c", "1", str(src), str(wav)],
-            check=True,
-        )
-    return wav
+def audio_seconds(wav):
+    return len(read_pcm16(wav)) / 16000
 
 
-def duration(wav):
-    # afinfo, not Python's `wave`: afconvert writes "extensible" WAV headers that `wave` rejects.
-    out = subprocess.run(["afinfo", str(wav)], capture_output=True, text=True, check=True).stdout
-    m = re.search(r"estimated duration:\s*([\d.]+)", out)
-    if not m:
-        raise RuntimeError("could not read duration of " + str(wav))
-    return float(m.group(1))
-
-
-def read_meta(run_dir):
-    p = run_dir / "meta.json"
-    return json.loads(p.read_text()) if p.exists() else {}
-
-
-def write_meta(run_dir, meta):
-    (run_dir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
-
+# ---------- commands ----------
 
 def cmd_list(args):
-    cases = select_cases(args.only)
-    if not cases:
-        print("no cases yet: add recordings to eval/cases.json (see README, Evaluation)")
+    cases = load_cases(args.audio_dir)
+    have = [c for c in cases if c["wav"].exists()]
     for c in cases:
-        audio = ROOT / c["audio"]
-        dur = "%.1fs" % duration(wav_for(c)) if audio.exists() else "MISSING"
-        ref = "ref" if (REFERENCE / (c["id"] + ".txt")).exists() else "no-ref"
-        print("%-6s %-14s %-8s %-7s terms=%s" % (c["id"], c.get("category", "?"), dur, ref, c.get("must_contain", [])))
+        mark = "%5.1fs" % audio_seconds(c["wav"]) if c["wav"].exists() else "  --  "
+        print("%-7s %-11s %s  %s" % (c["id"], c["category"], mark, c["say"][:70]))
+    print("\n%d of %d recorded in %s" % (len(have), len(cases), args.audio_dir))
     return 0
 
 
-def cmd_stt(args):
-    cfg = load_json(ROOT / "settings.json")["stt"][args.setup]
-    out = RESULTS / ("stt-" + args.setup)
-    out.mkdir(parents=True, exist_ok=True)
-    meta, failed = {}, 0
-    for c in select_cases(args.only):
-        try:
-            wav = wav_for(c)
+def score_setup(name, cfg, cleanup, cases, fresh):
+    """Run one speech setup over the cases; cached per (setup config, audio file)."""
+    rows = []
+    cfg_key = hashlib.sha1(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:10]
+    for c in cases:
+        cache = RESULTS / c["wav"].parent.name / name / (c["id"] + ".json")
+        key = "%s-%s" % (cfg_key, int(c["wav"].stat().st_mtime))
+        got = None
+        if cache.exists() and not fresh:
+            got = json.loads(cache.read_text(encoding="utf-8"))
+            got = got if got.get("key") == key else None
+        if got is None:
             t0 = time.perf_counter()
-            text = run_stt(cfg, wav)
-            dt = time.perf_counter() - t0
-            (out / (c["id"] + ".txt")).write_text(text + "\n", encoding="utf-8")
-            meta[c["id"]] = {"stt_seconds": round(dt, 2), "audio_seconds": round(duration(wav), 2)}
-            print("%-6s %5.1fs  %s" % (c["id"], dt, text[:90]))
-        except Exception as e:  # keep going, report at the end
-            failed += 1
-            meta[c["id"]] = {"error": str(e)}
-            print("%-6s ERROR %s" % (c["id"], e), file=sys.stderr)
-    write_meta(out, meta)
-    return 1 if failed else 0
+            raw = run_stt(cfg, c["wav"])
+            got = {"key": key, "raw": raw, "secs": round(time.perf_counter() - t0, 3)}
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(json.dumps(got, ensure_ascii=False), encoding="utf-8")
+        final = clean_text(cleanup, got["raw"])
+        ref = tokens(c["expected"])
+        rows.append({"case": c, "raw": got["raw"], "final": final, "secs": got["secs"],
+                     "audio": audio_seconds(c["wav"]), "n": len(ref),
+                     "edits_raw": edit_distance(ref, tokens(got["raw"])),
+                     "edits_final": edit_distance(ref, tokens(final)),
+                     "terms_raw": sum(term_found(t, got["raw"]) for t in c["terms"]),
+                     "terms_final": sum(term_found(t, final) for t in c["terms"]),
+                     "terms": len(c["terms"])})
+    return rows
 
 
-def cmd_clean(args):
-    cfg = load_json(ROOT / "settings.json")["cleanup"][args.cleanup]
-    stt_dir = RESULTS / ("stt-" + args.stt)
-    stt_meta = read_meta(stt_dir)
-    out = RESULTS / (args.stt + "__clean")
-    out.mkdir(parents=True, exist_ok=True)
-    meta, failed = {}, 0
-    for c in select_cases(args.only):
-        src = stt_dir / (c["id"] + ".txt")
-        if not src.exists():
-            print("%-6s skipped (no stt transcript)" % c["id"], file=sys.stderr)
-            failed += 1
-            continue
-        t0 = time.perf_counter()
-        text = clean_text(cfg, src.read_text(encoding="utf-8").strip())
-        (out / (c["id"] + ".txt")).write_text(text + "\n", encoding="utf-8")
-        m = dict(stt_meta.get(c["id"], {}))
-        m["clean_seconds"] = round(time.perf_counter() - t0, 4)
-        meta[c["id"]] = m
-        print("%-6s %s" % (c["id"], text[:90]))
-    write_meta(out, meta)
-    return 1 if failed else 0
+def pct(num, den):
+    return 100.0 * num / den if den else 0.0
 
 
-def term_found(term, text):
-    # Word-ish boundaries so `oc` does not match inside "doc"; case-insensitive.
-    return re.search(r"(?<![\w])" + re.escape(term) + r"(?![\w])", text, re.I) is not None
+def cmd_compare(args):
+    settings = load_json(ROOT / "settings.json")
+    cleanup = settings["cleanup"][args.cleanup]
+    cases = [c for c in load_cases(args.audio_dir, args.category) if c["wav"].exists()]
+    if not cases:
+        sys.exit("no recordings in %s: run  .venv/bin/python eval/record_cases.py" % args.audio_dir)
+    for name in args.stt:
+        if name not in settings["stt"]:
+            sys.exit("unknown stt setup %r (have: %s)" % (name, ", ".join(settings["stt"])))
+    results = {}
+    for name in args.stt:
+        print("running %-18s on %d clips ..." % (name, len(cases)), file=sys.stderr, flush=True)
+        results[name] = score_setup(name, settings["stt"][name], cleanup, cases, args.fresh)
 
+    plain = lambda rows: [r for r in rows if r["case"]["category"] != "edits"]  # noqa: E731
+    print("\n%d clips from %s   (raw = Whisper only, final = what would be pasted)\n" % (len(cases), args.audio_dir))
+    print("%-18s %9s %10s %11s %12s %8s %6s" % ("setup", "WER raw*", "WER final", "terms raw*", "terms final", "s/clip", "x real"))
+    for name, rows in results.items():
+        p = plain(rows)
+        print("%-18s %8.1f%% %9.1f%% %5d/%-5d %6d/%-5d %8.2f %6.2f" % (
+            name, pct(sum(r["edits_raw"] for r in p), sum(r["n"] for r in p)),
+            pct(sum(r["edits_final"] for r in rows), sum(r["n"] for r in rows)),
+            sum(r["terms_raw"] for r in p), sum(r["terms"] for r in p),
+            sum(r["terms_final"] for r in rows), sum(r["terms"] for r in rows),
+            statistics.mean(r["secs"] for r in rows), sum(r["secs"] for r in rows) / max(1e-9, sum(r["audio"] for r in rows))))
+    print("* raw excludes the spoken-edit clips, which are meant to change. 'x real' = processing time / audio time.")
 
-def cmd_score(args):
-    run = RESULTS / args.run
-    if not run.is_dir():
-        sys.exit("no such run: " + str(run))
-    meta = read_meta(run)
-    rows, review = [], []
-    for c in select_cases(args.only):
-        f = run / (c["id"] + ".txt")
-        if not f.exists():
-            continue
-        out = f.read_text(encoding="utf-8").strip()
-        terms = c.get("must_contain", [])
-        found = [t for t in terms if term_found(t, out)]
-        m = meta.get(c["id"], {})
-        total = m.get("stt_seconds", 0) + m.get("clean_seconds", 0)
-        dur = m.get("audio_seconds")
-        # Latency target: finished within half the length of the speech.
-        slow = bool(dur) and total > 0.5 * dur
-        rows.append((c["id"], c.get("category", "?"), "%d/%d" % (len(found), len(terms)) if terms else "n/a",
-                     "%.1f/%.1f" % (total, dur) if dur else "?", "slow" if slow else "ok"))
-        ref = REFERENCE / (c["id"] + ".txt")
-        review.append("## %s (%s)\nterms missing: %s\n\nREFERENCE:\n%s\n\nOUTPUT:\n%s\n" % (
-            c["id"], c.get("category", "?"), [t for t in terms if t not in found] or "none",
-            ref.read_text(encoding="utf-8").strip() if ref.exists() else "(no reference yet)", out))
-    lines = ["%-6s %-14s %-6s %-11s %s" % ("id", "category", "terms", "sec/audio", "latency")]
-    lines += ["%-6s %-14s %-6s %-11s %s" % r for r in rows]
-    print("\n".join(lines))
-    (run / "summary.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    (run / "review.md").write_text("\n".join(review), encoding="utf-8")
-    print("\nmanual review sheet: " + str(run / "review.md"))
+    cats = sorted({c["category"] for c in cases})
+    print("\nWER final by category:")
+    print("%-18s " % "setup" + " ".join("%-10s" % c[:10] for c in cats))
+    for name, rows in results.items():
+        cells = []
+        for cat in cats:
+            sub = [r for r in rows if r["case"]["category"] == cat]
+            cells.append("%-10s" % ("%.0f%%" % pct(sum(r["edits_final"] for r in sub), sum(r["n"] for r in sub))))
+        print("%-18s " % name + " ".join(cells))
+
+    base = args.stt[0]
+    if len(args.stt) > 1:
+        print("\nclip by clip against the baseline %s (final text):" % base)
+        for name in args.stt[1:]:
+            better = worse = same = 0
+            for a, b in zip(results[base], results[name]):
+                better += b["edits_final"] < a["edits_final"]
+                worse += b["edits_final"] > a["edits_final"]
+                same += b["edits_final"] == a["edits_final"]
+            print("  %-18s better on %2d, worse on %2d, identical on %2d" % (name, better, worse, same))
+    n_err = sum(r["edits_final"] for r in results[base])
+    print("\nwith %d clips the baseline makes %d word errors in total; differences of a few errors are noise,"
+          " so trust a gap only if clip-by-clip wins clearly outnumber losses." % (len(cases), n_err))
+
+    if args.verbose:
+        for name, rows in results.items():
+            print("\n== %s: clips with errors in the final text" % name)
+            for r in sorted(rows, key=lambda r: -r["edits_final"]):
+                if r["edits_final"]:
+                    print("  %s (%d errors)\n     expected: %s\n     pasted  : %s" % (
+                        r["case"]["id"], r["edits_final"], r["case"]["expected"], r["final"]))
     return 0
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--audio-dir", default=str(DEFAULT_AUDIO), help="folder with <id>.wav recordings")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name, fn in (("list", cmd_list), ("stt", cmd_stt), ("clean", cmd_clean), ("score", cmd_score)):
-        p = sub.add_parser(name)
-        p.add_argument("--only", nargs="*", help="case ids to run")
-        if name == "stt":
-            p.add_argument("--setup", required=True, help="stt setup name from settings.json")
-        if name == "clean":
-            p.add_argument("--stt", required=True, help="name of a finished stt run")
-            p.add_argument("--cleanup", default="glossary", help="cleanup setup from settings.json")
-        if name == "score":
-            p.add_argument("run", help="results dir name, e.g. stt-turbo-en or turbo-en__clean")
-        p.set_defaults(fn=fn)
+    sub.add_parser("list").set_defaults(fn=cmd_list)
+    p = sub.add_parser("compare")
+    p.add_argument("--stt", nargs="+", required=True, help="setups from settings.json; the first is the baseline")
+    p.add_argument("--cleanup", default="glossary", help="cleanup setup from settings.json")
+    p.add_argument("--category", nargs="*", help="only these categories")
+    p.add_argument("--fresh", action="store_true", help="ignore cached Whisper results")
+    p.add_argument("-v", "--verbose", action="store_true", help="show every clip that has errors")
+    p.set_defaults(fn=cmd_compare)
     args = ap.parse_args()
     sys.exit(args.fn(args))
 
