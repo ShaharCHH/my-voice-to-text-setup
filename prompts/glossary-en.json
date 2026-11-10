@@ -1,0 +1,10 @@
+[
+  {"match": "\\b(?:cube|kube)\\s*(?:control|cuddle|cuttle|ctl|c\\s?t\\s?l)\\b", "to": "kubectl"},
+  {"match": "\\b(?:cube|kube)\\s+deck\\b", "to": "Kube Deck"},
+  {"match": "\\bargo\\s*c\\s*d\\b", "to": "ArgoCD"},
+  {"match": "\\bh\\.?\\s?a\\.?\\s?proxy\\b", "to": "HAProxy"},
+  {"match": "\\bp\\.?\\s?v\\.?\\s?c\\b", "to": "PVC"},
+  {"match": "\\be\\.?\\s?k\\.?\\s?s\\b", "to": "EKS"},
+  {"match": "\\br\\.?\\s?h\\.?\\s?c\\.?\\s?o\\.?\\s?s\\b", "to": "RHCOS"},
+  {"match": "\\b(?:um+|uh+|erm)\\b[,.]?\\s*", "to": ""}
+]
